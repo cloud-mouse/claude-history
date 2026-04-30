@@ -6,9 +6,9 @@ export default {
   dest: '.vitepress/dist',
   themeConfig: {
     nav: [
-      { text: '功能特性', link: '/#为什么选择-claude-history-viewer' },
+      { text: '功能特性', link: '/#为什么选择-claude-history' },
       { text: '截图预览', link: '/#真实效果-一目了然' },
-      { text: '快速开始', link: '/#开始使用-claude-history-viewer' },
+      { text: '快速开始', link: '/#开始使用-claude-history' },
       { text: 'GitHub', link: 'https://github.com/cloud-mouse/claude-history' }
     ],
     sidebar: false,

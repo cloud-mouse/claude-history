@@ -66,7 +66,7 @@ claude-history/
 
 ```json
 {
-  "name": "claude-history-viewer",
+  "name": "claude-history",
   "version": "1.0.0",
   "description": "Browse Claude Code conversation history",
   "main": "electron/index.js",

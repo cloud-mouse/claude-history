@@ -27,9 +27,9 @@ docs/                                    # Vitepress 站点根目录
 ├── index.md                            # 首页（单页内容）
 └── superpowers/
     ├── specs/                          # 设计文档
-    │   └── 2026-04-30-claude-history-viewer-site-design.md
+    │   └── 2026-04-30-claude-history-site-design.md
     └── plans                           # 本计划
-        └── 2026-04-30-claude-history-viewer-site-plan.md
+        └── 2026-04-30-claude-history-site-plan.md
 ```
 
 ---
@@ -61,7 +61,7 @@ export default {
   dest: '.vitepress/dist',
   themeConfig: {
     navbar: [
-      { text: 'GitHub', link: 'https://github.com/your-username/claude-history-viewer' }
+      { text: 'GitHub', link: 'https://github.com/your-username/claude-history' }
     ],
     sidebar: false  // 单页站点，禁用侧边栏
   }
@@ -129,7 +129,7 @@ Claude Code 对话历史的终极管理工具
 
 <!-- Hero CTA -->
 <div class="hero-cta">
-  <a href="https://github.com/your-username/claude-history-viewer" class="primary-btn">查看 GitHub</a>
+  <a href="https://github.com/your-username/claude-history" class="primary-btn">查看 GitHub</a>
 </div>
 ```
 
@@ -160,8 +160,8 @@ git commit -m "feat: initialize Vitepress configuration"
     <span class="tag">会话恢复</span>
   </div>
   <div class="cta">
-    <a href="https://github.com/your-username/claude-history-viewer" class="primary-btn">立即下载</a>
-    <a href="https://github.com/your-username/claude-history-viewer" class="secondary-btn">查看 GitHub</a>
+    <a href="https://github.com/your-username/claude-history" class="primary-btn">立即下载</a>
+    <a href="https://github.com/your-username/claude-history" class="secondary-btn">查看 GitHub</a>
   </div>
 </div>
 ```
@@ -515,7 +515,7 @@ git commit -m "feat: add quick start section with installation instructions"
 
 <div class="footer">
   <p>MIT License · Claude History Viewer</p>
-  <p><a href="https://github.com/your-username/claude-history-viewer">GitHub</a></p>
+  <p><a href="https://github.com/your-username/claude-history">GitHub</a></p>
 </div>
 ```
 

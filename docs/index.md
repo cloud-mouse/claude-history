@@ -108,7 +108,7 @@ layout: page
         <h4>克隆并安装依赖</h4>
         <p>获取项目代码并安装所需依赖</p>
         <div class="step-code"><pre><code>git clone https://github.com/cloud-mouse/claude-history.git</code></pre></div>
-        <div class="step-code"><pre><code>cd claude-history-viewer</code></pre></div>
+        <div class="step-code"><pre><code>cd claude-history</code></pre></div>
         <div class="step-code"><pre><code>pnpm install</code></pre></div>
       </div>
       <div class="step-card">
