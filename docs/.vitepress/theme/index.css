@@ -456,6 +456,7 @@ html.dark .feature-icon {
   border-radius: var(--radius-md);
   padding: 28px;
   position: relative;
+  min-height: 200px;
 }
 
 .step-number {
@@ -520,6 +521,7 @@ html.dark .feature-icon {
   font-size: 0.8rem;
   line-height: 1.6;
   overflow-x: auto;
+  white-space: pre-wrap;
 }
 
 .step-code code {
