@@ -1,4 +1,4 @@
-# Claude History Viewer — Design Specification
+# Claude History — Design Specification
 
 ## Overview
 

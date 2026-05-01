@@ -1,7 +1,7 @@
-# Claude History Viewer 站点设计文档
+# Claude History 站点设计文档
 
 **日期**：2026-04-30
-**项目**：Claude History Viewer 文档/演示站点
+**项目**：Claude History 文档/演示站点
 **状态**：已批准
 
 ---
@@ -10,7 +10,7 @@
 
 ### 1.1 站点定位
 
-Claude History Viewer 的官方文档/演示站点，用于展示产品功能、截图和使用说明。
+Claude History 的官方文档/演示站点，用于展示产品功能、截图和使用说明。
 
 ### 1.2 核心信息
 
@@ -61,7 +61,7 @@ Claude History Viewer 的官方文档/演示站点，用于展示产品功能、
 ### 2.2 各区域说明
 
 #### Header
-- Logo：项目名称 "Claude History Viewer"
+- Logo：项目名称 "Claude History"
 - GitHub 链接：指向项目仓库
 - 简洁导航，无侧边栏
 
@@ -174,7 +174,7 @@ claude-history/
 ```javascript
 // .vitepress/config.js
 export default {
-  title: 'Claude History Viewer',
+  title: 'Claude History',
   description: 'Claude Code 对话历史的终极管理工具',
   themeConfig: {
     nav: [

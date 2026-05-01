@@ -1,4 +1,4 @@
-# Claude History Viewer
+# Claude History
 
 一款用于浏览和管理本地 Claude Code 对话历史的桌面应用。
 

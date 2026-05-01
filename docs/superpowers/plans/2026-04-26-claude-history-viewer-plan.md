@@ -1,4 +1,4 @@
-# Claude History Viewer — Implementation Plan
+# Claude History — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -121,7 +121,7 @@ export default defineConfig({
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Claude History Viewer</title>
+  <title>Claude History</title>
 </head>
 <body>
   <div id="app"></div>
@@ -2266,7 +2266,7 @@ git commit -m "feat: add resizable panel handles"
 
 ```yaml
 appId: com.claude.history-viewer
-productName: Claude History Viewer
+productName: Claude History
 directories:
   output: out
   buildResources: build

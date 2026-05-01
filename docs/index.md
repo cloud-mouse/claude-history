@@ -23,7 +23,7 @@ layout: page
 <div class="features-section">
   <div class="section-header">
     <span class="section-label">功能特性</span>
-    <h2>为什么选择 Claude History Viewer？</h2>
+    <h2>为什么选择 Claude History？</h2>
     <p>专为 Claude Code 用户打造的对话管理工具，让你轻松浏览、搜索和恢复历史会话</p>
   </div>
   <div class="features-grid">
@@ -81,7 +81,7 @@ layout: page
     <h2>真实效果，一目了然</h2>
   </div>
   <div class="screenshot-primary">
-    <img src="/preview/3.png" alt="Claude History Viewer 三栏布局" />
+    <img src="/preview/3.png" alt="Claude History 三栏布局" />
     <p class="caption">三栏布局 - 项目列表 / 对话列表 / 消息详情</p>
   </div>
 </div>
@@ -100,7 +100,7 @@ layout: page
   <div class="quickstart-inner">
     <div class="section-header">
       <span class="section-label">快速开始</span>
-      <h2>开始使用 Claude History Viewer</h2>
+      <h2>开始使用 Claude History</h2>
     </div>
     <div class="steps-grid">
       <div class="step-card">
@@ -130,12 +130,12 @@ layout: page
 
 <div class="cta-banner">
   <h2>准备好开始了吗？</h2>
-  <p>立即使用 Claude History Viewer，轻松管理你的 AI 对话历史</p>
+  <p>立即使用 Claude History，轻松管理你的 AI 对话历史</p>
   <a href="https://github.com/cloud-mouse/claude-history" class="primary-btn">在 GitHub 上查看</a>
 </div>
 
 <div class="footer">
-  <p>MIT License · Claude History Viewer</p>
+  <p>MIT License · Claude History</p>
   <p><a href="https://github.com/cloud-mouse/claude-history">GitHub</a></p>
 </div>
 

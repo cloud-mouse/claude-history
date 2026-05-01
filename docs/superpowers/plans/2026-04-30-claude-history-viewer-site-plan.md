@@ -1,4 +1,4 @@
-# Claude History Viewer 站点实现计划
+# Claude History 站点实现计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -55,7 +55,7 @@ mkdir -p docs/.vitepress/theme docs/public/preview
 ```javascript
 // docs/.vitepress/config.js
 export default {
-  title: 'Claude History Viewer',
+  title: 'Claude History',
   description: 'Claude Code 对话历史的终极管理工具，支持 Markdown、代码高亮、主题切换和会话恢复',
   srcDir: '.',
   dest: '.vitepress/dist',
@@ -123,7 +123,7 @@ export default {
 - [ ] **Step 5: 创建首页内容**
 
 ```markdown
-# Claude History Viewer
+# Claude History
 
 Claude Code 对话历史的终极管理工具
 
@@ -373,7 +373,7 @@ cp preview/demo.gif docs/public/preview/
 
 <div class="screenshots">
   <div class="screenshot-primary">
-    <img src="/preview/3.png" alt="Claude History Viewer 三栏布局" />
+    <img src="/preview/3.png" alt="Claude History 三栏布局" />
     <p class="caption">三栏布局 - 项目列表 / 对话列表 / 消息详情</p>
   </div>
 </div>
@@ -514,7 +514,7 @@ git commit -m "feat: add quick start section with installation instructions"
 ---
 
 <div class="footer">
-  <p>MIT License · Claude History Viewer</p>
+  <p>MIT License · Claude History</p>
   <p><a href="https://github.com/your-username/claude-history">GitHub</a></p>
 </div>
 ```

@@ -1,5 +1,5 @@
 appId: com.claude.history-viewer
-productName: Claude History Viewer
+productName: Claude History
 directories:
   output: out
   buildResources: build

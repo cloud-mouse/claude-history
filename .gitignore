@@ -7,7 +7,7 @@ out/
 # Vitepress cache
 docs/.vitepress/cache/*
 
-# Claude history viewer specific
+# Claude History specific
 *.log
 npm-debug.log*
 
