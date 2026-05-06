@@ -13,6 +13,7 @@
         </svg>
       </span>
       <span class="role-label">{{ roleLabel }}</span>
+      <span v-if="formattedTime" class="bubble-time">{{ formattedTime }}</span>
     </div>
     <div class="bubble-content">
       <template v-for="(block, i) in normalizedBlocks" :key="i">
@@ -25,6 +26,15 @@
             <div v-if="block.body && block.body.trim()" v-html="block.renderedHtml" class="markdown-content command-body"></div>
           </div>
           <div v-else class="text-content">
+            <button class="copy-md-btn" @click="copyText(block, $event)" title="复制内容">
+              <svg v-if="copiedIndex !== i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </button>
             <div v-html="block.renderedHtml" class="markdown-content"></div>
           </div>
         </div>
@@ -46,6 +56,8 @@
         <WriteToolBlock v-else-if="block.type === 'tool_use' && block.name === 'Write'" :block="block" :ref="el => setChildRef('write_' + i, el)" />
         <EditToolBlock v-else-if="block.type === 'tool_use' && block.name === 'Edit'" :block="block" :ref="el => setChildRef('edit_' + i, el)" />
         <ReadToolBlock v-else-if="block.type === 'tool_use' && block.name === 'Read'" :block="block" :ref="el => setChildRef('read_' + i, el)" />
+        <GlobToolBlock v-else-if="block.type === 'tool_use' && block.name === 'Glob'" :block="block" />
+        <GrepToolBlock v-else-if="block.type === 'tool_use' && block.name === 'Grep'" :block="block" />
         <AskUserQuestionBlock v-else-if="block.type === 'tool_use' && (block.name === 'AskUserQuestion' || block.toolName === 'AskUserQuestion')" :block="block" />
         <TaskOutputBlock v-else-if="block.type === 'tool_use' && (block.name === 'TaskOutput' || block.toolName === 'TaskOutput')" :block="block" />
         <ToolCall v-else-if="block.type === 'tool_use'" :block="block" :ref="el => setChildRef('tool_' + i, el)" />
@@ -85,6 +97,8 @@ import TodoWriteBlock from '../tools/TodoWriteBlock.vue';
 import TaskUpdateBlock from '../tools/TaskUpdateBlock.vue';
 import AskUserQuestionBlock from '../tools/AskUserQuestionBlock.vue';
 import TaskOutputBlock from '../tools/TaskOutputBlock.vue';
+import GlobToolBlock from '../tools/GlobToolBlock.vue';
+import GrepToolBlock from '../tools/GrepToolBlock.vue';
 
 const props = defineProps({
   blocks: {
@@ -95,6 +109,10 @@ const props = defineProps({
     type: String,
     required: true,
     validator: (value) => ['user', 'assistant'].includes(value)
+  },
+  timestamp: {
+    type: [String, Number],
+    default: null
   }
 });
 
@@ -135,7 +153,35 @@ const roleLabel = computed(() => {
   return props.role === 'user' ? '用户' : 'Claude';
 });
 
+const formattedTime = computed(() => {
+  if (!props.timestamp) return '';
+  const ts = typeof props.timestamp === 'number'
+    ? (props.timestamp > 9999999999 ? props.timestamp : props.timestamp * 1000)
+    : new Date(props.timestamp).getTime();
+  const date = new Date(ts);
+  if (isNaN(date.getTime())) return '';
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+});
+
 const previewUrl = ref(null);
+const copiedIndex = ref(-1);
+
+function copyText(block, event) {
+  event.stopPropagation();
+  const text = block.text || block.content || '';
+  navigator.clipboard.writeText(text).then(() => {
+    const idx = normalizedBlocks.value.indexOf(block);
+    copiedIndex.value = idx;
+    setTimeout(() => { copiedIndex.value = -1; }, 2000);
+  });
+}
 
 function previewImage(url) {
   previewUrl.value = url;
@@ -226,6 +272,12 @@ defineExpose({ expandAll, collapseAll });
   color: var(--text-muted);
 }
 
+.bubble-time {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
 .bubble-content {
   padding: 12px 16px;
   border-radius: var(--radius-lg);
@@ -245,8 +297,38 @@ defineExpose({ expandAll, collapseAll });
 }
 
 .text-content {
+  position: relative;
   word-break: break-word;
   line-height: 1.7;
+}
+
+.copy-md-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: all var(--transition-fast);
+  z-index: 2;
+}
+
+.text-content:hover .copy-md-btn {
+  opacity: 1;
+}
+
+.copy-md-btn:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: var(--bg-secondary);
 }
 
 .chat-bubble.assistant .text-content {

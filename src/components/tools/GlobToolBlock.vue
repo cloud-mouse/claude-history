@@ -1,22 +1,22 @@
 <template>
-  <div class="write-tool-block">
-    <div class="write-header">
-      <span class="write-icon">
+  <div class="glob-tool-block">
+    <div class="glob-header">
+      <span class="glob-icon">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
         </svg>
       </span>
-      <span class="write-label">Write File</span>
+      <span class="glob-label">Glob</span>
     </div>
-    <div class="write-content">
-      <div class="write-field">
-        <span class="field-label">File Path</span>
-        <span class="field-value file-path">{{ filePath }}</span>
+    <div class="glob-content">
+      <div class="glob-field">
+        <span class="field-label">Pattern</span>
+        <span class="field-value pattern-value">{{ pattern }}</span>
       </div>
-      <div class="write-field">
-        <span class="field-label">Content</span>
-        <pre class="field-value code-content">{{ content }}</pre>
+      <div v-if="path" class="glob-field">
+        <span class="field-label">Path</span>
+        <span class="field-value path-value">{{ path }}</span>
       </div>
     </div>
   </div>
@@ -43,8 +43,8 @@ const input = computed(() => {
   return props.block.input || {};
 });
 
-const filePath = computed(() => input.value.file_path || '');
-const content = computed(() => input.value.content || '');
+const pattern = computed(() => input.value.pattern || '');
+const path = computed(() => input.value.path || '');
 
 function expandAll() {}
 function collapseAll() {}
@@ -53,7 +53,7 @@ defineExpose({ expandAll, collapseAll });
 </script>
 
 <style scoped>
-.write-tool-block {
+.glob-tool-block {
   margin-top: 8px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
@@ -61,7 +61,7 @@ defineExpose({ expandAll, collapseAll });
   background-color: var(--bg-secondary);
 }
 
-.write-header {
+.glob-header {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -70,26 +70,26 @@ defineExpose({ expandAll, collapseAll });
   border-bottom: 1px solid var(--border-color);
 }
 
-.write-icon {
+.glob-icon {
   display: flex;
   align-items: center;
   color: var(--primary);
 }
 
-.write-label {
+.glob-label {
   font-weight: 600;
   font-size: var(--font-size-sm);
   color: var(--text-primary);
 }
 
-.write-content {
+.glob-content {
   padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
-.write-field {
+.glob-field {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -108,7 +108,7 @@ defineExpose({ expandAll, collapseAll });
   color: var(--text-primary);
 }
 
-.field-value.file-path {
+.pattern-value {
   font-family: var(--font-mono);
   color: var(--primary);
   background-color: var(--bg-tertiary);
@@ -117,20 +117,13 @@ defineExpose({ expandAll, collapseAll });
   word-break: break-all;
 }
 
-.code-diff {
-  margin: 0;
-  padding: 12px;
-  border-radius: var(--radius-sm);
+.path-value {
   font-family: var(--font-mono);
-  font-size: var(--font-size-sm);
-  white-space: pre-wrap;
-  word-break: break-word;
-  line-height: 1.5;
-  overflow-x: auto;
-}
-
-.code-content {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
   background-color: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  word-break: break-all;
 }
 </style>

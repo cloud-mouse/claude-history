@@ -52,6 +52,7 @@
               v-if="message.role === 'user' || message.role === 'assistant' || message.type === 'tool_result'"
               :blocks="message.blocks || [message]"
               :role="message.role === 'tool_result' ? 'assistant' : message.role"
+              :timestamp="message.timestamp"
               :ref="el => setBubbleRef(index, el)"
             />
             <PermissionBadge
