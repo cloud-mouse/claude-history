@@ -15,6 +15,14 @@
       </button>
     </div>
 
+    <div v-if="projects && projects.length > 0" class="sort-bar">
+      <svg class="sort-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>
+      </svg>
+      <button :class="['sort-btn', { active: sortBy === 'time' }]" @click="sortBy = 'time'">时间</button>
+      <button :class="['sort-btn', { active: sortBy === 'count' }]" @click="sortBy = 'count'">数量</button>
+    </div>
+
     <div class="project-list-content">
       <SkeletonLoader v-if="loading" :count="5" height="56px" />
 
@@ -29,7 +37,7 @@
 
       <ul v-else class="project-items">
         <li
-          v-for="project in projects"
+          v-for="project in sortedProjects"
           :key="project.id"
           :class="['project-item', { active: project.id === selectedId }]"
           @click="$emit('select', project.id)"
@@ -63,7 +71,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import SkeletonLoader from '../common/SkeletonLoader.vue';
 import ConfirmDialog from '../common/ConfirmDialog.vue';
 
@@ -78,6 +86,21 @@ const emit = defineEmits(['select', 'refresh', 'delete']);
 
 const showDeleteConfirm = ref(false);
 const pendingDelete = ref(null);
+const sortBy = ref('time');
+
+const sortedProjects = computed(() => {
+  const list = [...(props.projects || [])];
+  if (sortBy.value === 'count') {
+    list.sort((a, b) => (b.conversations?.length || 0) - (a.conversations?.length || 0));
+  } else {
+    list.sort((a, b) => {
+      const aTime = Math.max(0, ...((a.conversations || []).map(c => c.updatedAt || 0)));
+      const bTime = Math.max(0, ...((b.conversations || []).map(c => c.updatedAt || 0)));
+      return bTime - aTime;
+    });
+  }
+  return list;
+});
 
 function confirmDelete(project) {
   pendingDelete.value = {
@@ -178,6 +201,43 @@ function getShortPath(path) {
 .project-list-content {
   flex: 1;
   overflow-y: auto;
+}
+
+.sort-bar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 16px 8px;
+}
+
+.sort-icon {
+  color: var(--text-muted);
+  opacity: 0.5;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+.sort-btn {
+  padding: 3px 8px;
+  font-size: 11px;
+  font-family: var(--font-sans);
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: all var(--transition-fast);
+}
+
+.sort-btn:hover {
+  opacity: 1;
+  color: var(--primary);
+}
+
+.sort-btn.active {
+  opacity: 1;
+  color: var(--primary);
+  font-weight: 600;
 }
 
 .project-items {
