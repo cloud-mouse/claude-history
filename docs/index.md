@@ -23,7 +23,7 @@ layout: page
 <div class="features-section">
   <div class="section-header">
     <span class="section-label">功能特性</span>
-    <h2>为什么选择 Claude History？</h2>
+    <h2 id="为什么选择-claude-history">为什么选择 Claude History？</h2>
     <p>专为 Claude Code 用户打造的对话管理工具，让你轻松浏览、搜索和恢复历史会话</p>
   </div>
   <div class="features-grid">
