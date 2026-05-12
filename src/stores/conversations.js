@@ -68,5 +68,7 @@ export const useConversationsStore = defineStore('conversations', () => {
 
   function clearActive() { activeConversation.value = null; }
 
-  return { selectedConvId, activeConversation, loading, skippedMessages, selectedConv, titleMap, openConversation, clearActive };
+  function clearCache() { cache.clear(); }
+
+  return { selectedConvId, activeConversation, loading, skippedMessages, selectedConv, titleMap, openConversation, clearActive, clearCache };
 });

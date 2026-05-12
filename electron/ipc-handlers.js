@@ -119,6 +119,12 @@ function registerIpcHandlers() {
     }
   });
 
+  // clear-cache — Clear the in-memory conversation cache
+  ipcMain.handle('clear-cache', async () => {
+    conversationCache.clear();
+    return { success: true };
+  });
+
   // 2. get-conversations — Get conversations for a project from SQLite
   ipcMain.handle('get-conversations', async (_, projectId) => {
     try {

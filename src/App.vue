@@ -113,9 +113,11 @@ function handleConversationSelect(conv) {
   conversationsStore.openConversation(conv);
 }
 
-function handleRefresh() {
+async function handleRefresh() {
   projectsStore.clearSelectedProject();
   conversationsStore.clearActive();
+  conversationsStore.clearCache();
+  await window.electronAPI.clearCache();
   projectsStore.loadProjects();
 }
 
