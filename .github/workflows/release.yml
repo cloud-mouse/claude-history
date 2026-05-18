@@ -11,6 +11,7 @@ permissions:
 jobs:
   release:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: macos-latest
@@ -36,3 +37,60 @@ jobs:
         run: npx electron-builder --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-release-notes:
+    needs: release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=${GITHUB_REF_NAME}
+          VERSION=${TAG#v}
+
+          cat > /tmp/release-notes.md << 'BODY'
+          ## Claude History
+
+          A desktop app for browsing and managing your Claude Code conversation history.
+
+          ---
+
+          ### Features
+
+          - **Three-panel layout** — Project list, conversation list, and message detail view; each panel is collapsible and resizable
+          - **Conversation browsing** — Auto-discovers all projects from `~/.claude/projects/`, with search and smart date formatting
+          - **Rich message rendering** — Full Markdown support, syntax-highlighted code blocks, image preview with lightbox
+          - **Claude tool visualization** — Dedicated components for Edit, Write, Read, Glob, Grep, Agent, Thinking, Todo, Task tools and more
+          - **Session resume** — One-click to open terminal and resume a Claude Code session
+          - **4 built-in themes** — Light, Dark, Warm, and Monokai with instant switching
+          - **SQLite caching** — Fast loading with local database cache and LRU in-memory cache
+          - **Smart title extraction** — Automatically generates conversation titles from message content
+
+          ### Downloads
+
+          | Platform | File | Notes |
+          |----------|------|-------|
+          | macOS (Apple Silicon) | `*.dmg` | Drag to Applications folder |
+          | macOS (Apple Silicon) | `*.zip` | Portable, unzip and run |
+          | Windows | `*.exe` (NSIS) | Standard installer |
+          | Windows | `*.exe` (Portable) | No installation needed |
+          | Linux | `*.AppImage` | Make executable and run |
+
+          ### System Requirements
+
+          - **macOS** 10.15+ (Catalina or later)
+          - **Windows** 10 or later
+          - **Linux** — Most distributions with glibc 2.28+
+
+          ---
+
+          **Full Changelog**: https://github.com/cloud-mouse/claude-history/commits/${TAG}
+          BODY
+
+          sed -i "s/\${TAG}/$TAG/g" /tmp/release-notes.md
+
+          gh release edit "$TAG" --notes-file /tmp/release-notes.md
