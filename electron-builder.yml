@@ -27,3 +27,7 @@ linux:
 asar: true
 asarUnpack:
   - node_modules/better-sqlite3/**/*
+publish:
+  provider: github
+  owner: cloud-mouse
+  repo: claude-history

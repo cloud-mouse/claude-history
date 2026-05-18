@@ -8,6 +8,7 @@
     "build": "vite build",
     "electron:dev": "concurrently \"vite\" \"electron .\"",
     "electron:build": "vite build && electron-builder",
+    "electron:release": "vite build && electron-builder --publish always",
     "postinstall": "ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ electron-builder install-app-deps",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
