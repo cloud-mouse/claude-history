@@ -9,7 +9,16 @@ permissions:
   contents: write
 
 jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete existing release if any
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release delete "${{ github.ref_name }}" --yes --repo "${{ github.repository }}" || true
+
   release:
+    needs: cleanup
     strategy:
       fail-fast: false
       matrix:
@@ -45,12 +54,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Generate release notes
+      - name: Update release notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG=${GITHUB_REF_NAME}
-          VERSION=${TAG#v}
 
           cat > /tmp/release-notes.md << 'BODY'
           ## Claude History
@@ -91,6 +99,6 @@ jobs:
           **Full Changelog**: https://github.com/cloud-mouse/claude-history/commits/${TAG}
           BODY
 
-          sed -i "s/\${TAG}/$TAG/g" /tmp/release-notes.md
+          sed -i "s|\${TAG}|$TAG|g" /tmp/release-notes.md
 
-          gh release edit "$TAG" --notes-file /tmp/release-notes.md
+          gh release edit "$TAG" --notes-file /tmp/release-notes.md --repo "${{ github.repository }}"
