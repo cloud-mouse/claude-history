@@ -104,7 +104,7 @@ export const useFeishuStore = defineStore('feishu', () => {
       const result = await window.electronAPI.feishuBindSession({ jsonlPath });
       if (result.success) {
         binding.value = {
-          chatId: '_pending',
+          chatId: `_pending_${result.sessionId?.slice(0, 8) || 'unknown'}`,
           jsonlPath: result.jsonlPath,
           sessionId: result.sessionId
         };

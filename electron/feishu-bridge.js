@@ -946,7 +946,23 @@ class FeishuBridge {
     if (!fs.existsSync(jsonlPath)) return [];
 
     try {
-      const content = fs.readFileSync(jsonlPath, 'utf-8');
+      const stat = fs.statSync(jsonlPath);
+      // Only read the tail of large files (> 1MB)
+      const MAX_READ = 1024 * 1024;
+      let content;
+      if (stat.size > MAX_READ) {
+        const fd = fs.openSync(jsonlPath, 'r');
+        const buf = Buffer.alloc(MAX_READ);
+        fs.readSync(fd, buf, 0, MAX_READ, stat.size - MAX_READ);
+        fs.closeSync(fd);
+        content = buf.toString('utf-8');
+        // Discard first partial line
+        const nlIdx = content.indexOf('\n');
+        if (nlIdx >= 0) content = content.slice(nlIdx + 1);
+      } else {
+        content = fs.readFileSync(jsonlPath, 'utf-8');
+      }
+
       const lines = content.trim().split('\n').filter(Boolean);
       const recent = lines.slice(-count * 2);  // Get extra to filter meaningful entries
 
@@ -987,6 +1003,19 @@ class FeishuBridge {
    * Spawn Claude Code CLI with --resume to process a message.
    * Derives the correct cwd from the JSONL path so --resume can find the session.
    * Falls back to a new session if the resume target doesn't exist.
+   */
+  /**
+   * Spawn Claude Code CLI with --resume to process a message.
+   * Derives the correct cwd from the JSONL path so --resume can find the session.
+   * Falls back to a new session if the resume target doesn't exist.
+   *
+   * ⚠️ SECURITY MODEL: Uses --permission-mode acceptEdits which auto-approves
+   * file edits without confirmation. This means anyone who can send messages
+   * to the Feishu bot can modify files in the bound project directory.
+   * The security boundary is the Feishu bot's message access control:
+   * - In P2P chats: only the matched user
+   * - In group chats: all group members (add bot to groups with caution)
+   * Do NOT expose the bot to untrusted users.
    */
   _spawnClaude(sessionId, jsonlPath, message) {
     return new Promise((resolve, reject) => {
@@ -1045,9 +1074,14 @@ class FeishuBridge {
       child.stdout.on('data', (d) => { stdout += d.toString(); });
       child.stderr.on('data', (d) => { stderr += d.toString(); });
 
-      // 5 minute timeout
+      // 5 minute timeout with SIGKILL escalation
       const timer = setTimeout(() => {
         child.kill('SIGTERM');
+        // If SIGTERM doesn't work after 10s, force kill
+        const killTimer = setTimeout(() => {
+          try { child.kill('SIGKILL'); } catch {}
+        }, 10000);
+        killTimer.unref();
         reject(new Error('Claude Code 超时（5分钟）'));
       }, 300000);
 
@@ -1417,7 +1451,11 @@ function decodeProjectSlug(slug) {
   return result;
 }
 
+const MAX_SLUG_PARTS = 16;   // Safety limit on path depth
+const MAX_VARIANTS = 64;     // Cap nameVariants output
+
 function tryDecode(parts, currentPath) {
+  if (currentPath.length > MAX_SLUG_PARTS) return null;
   if (parts.length === 0) {
     const candidate = '/' + currentPath.join('/');
     return fs.existsSync(candidate) ? candidate : null;
@@ -1463,7 +1501,7 @@ function nameVariants(name) {
   if (positions.length >= 2) {
     // Generate all 2^n - 1 non-empty subsets (skip original and full which we already have)
     const n = positions.length;
-    for (let mask = 1; mask < (1 << n); mask++) {
+    for (let mask = 1; mask < (1 << n) && results.length < MAX_VARIANTS; mask++) {
       if (mask === (1 << n) - 1) continue; // Skip full replacement (already added)
       const arr = name.split('');
       for (let bit = 0; bit < n; bit++) {

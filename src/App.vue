@@ -90,7 +90,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useProjectsStore } from './stores/projects';
 import { useConversationsStore } from './stores/conversations';
 import { useThemeStore } from './stores/theme';
@@ -193,21 +193,31 @@ function stopResize() {
   document.body.style.userSelect = '';
 }
 
+const _unsubs = [];
+
 onMounted(() => {
   themeStore.initTheme();
   projectsStore.loadProjects();
   feishuStore.detect();
 
-  // Register event listeners for real-time updates
-  window.electronAPI.onFeishuStatusChanged((data) => {
-    feishuStore.handleStatusChanged(data);
-  });
-  window.electronAPI.onFeishuJsonlChanged((data) => {
-    // Reload current conversation if it matches
-    if (conversationsStore.activeConversation?.filePath === data.jsonlPath) {
-      conversationsStore.openConversation(conversationsStore.activeConversation);
-    }
-  });
+  // Register event listeners for real-time updates (with cleanup)
+  _unsubs.push(
+    window.electronAPI.onFeishuStatusChanged((data) => {
+      feishuStore.handleStatusChanged(data);
+    })
+  );
+  _unsubs.push(
+    window.electronAPI.onFeishuJsonlChanged((data) => {
+      // Reload current conversation if it matches
+      if (conversationsStore.activeConversation?.filePath === data.jsonlPath) {
+        conversationsStore.openConversation(conversationsStore.activeConversation);
+      }
+    })
+  );
+});
+
+onUnmounted(() => {
+  for (const unsub of _unsubs) unsub();
 });
 </script>
 

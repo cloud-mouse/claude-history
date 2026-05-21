@@ -22,15 +22,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   feishuUnbindSession: () => ipcRenderer.invoke('feishu:unbindSession'),
   feishuGetBinding: (jsonlPath) => ipcRenderer.invoke('feishu:getBinding', jsonlPath),
 
-  // Event listeners (main → renderer)
+  // Event listeners (main → renderer) — returns unsubscribe function
   onFeishuStatusChanged: (callback) => {
-    ipcRenderer.on('feishu:statusChanged', (_, data) => callback(data));
+    const handler = (_, data) => callback(data);
+    ipcRenderer.on('feishu:statusChanged', handler);
+    return () => ipcRenderer.removeListener('feishu:statusChanged', handler);
   },
   onFeishuJsonlChanged: (callback) => {
-    ipcRenderer.on('feishu:jsonlChanged', (_, data) => callback(data));
-  },
-  removeFeishuListeners: () => {
-    ipcRenderer.removeAllListeners('feishu:statusChanged');
-    ipcRenderer.removeAllListeners('feishu:jsonlChanged');
+    const handler = (_, data) => callback(data);
+    ipcRenderer.on('feishu:jsonlChanged', handler);
+    return () => ipcRenderer.removeListener('feishu:jsonlChanged', handler);
   }
 });
