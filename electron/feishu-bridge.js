@@ -1076,8 +1076,63 @@ class FeishuBridge {
 
       let stdout = '';
       let stderr = '';
+      let jsonBuf = '';       // Buffer for incremental JSON line parsing
+      let notifiedTool = null; // Debounce tool notifications
+      const SENSITIVE_TOOLS = ['Bash', 'Write', 'Edit', 'MultiEdit'];
 
-      child.stdout.on('data', (d) => { stdout += d.toString(); });
+      const onStdout = (d) => {
+        const chunk = d.toString();
+        stdout += chunk;
+
+        if (!chatId) return;
+        // Parse JSON stream for tool_use events and notify Feishu
+        jsonBuf += chunk;
+        let nlIdx;
+        while ((nlIdx = jsonBuf.indexOf('\n')) >= 0) {
+          const line = jsonBuf.slice(0, nlIdx).trim();
+          jsonBuf = jsonBuf.slice(nlIdx + 1);
+          if (!line) continue;
+          try {
+            const obj = JSON.parse(line);
+            // Look for tool_use in assistant messages
+            const content = obj.message?.content;
+            if (!Array.isArray(content)) continue;
+            for (const block of content) {
+              if (block.type === 'tool_use' && SENSITIVE_TOOLS.includes(block.name) && !notifiedTool) {
+                notifiedTool = setTimeout(() => { notifiedTool = null; }, 3000);
+                let detail = '';
+                if (block.name === 'Bash' && block.input?.command) {
+                  detail = `\`bash ${block.input.command.slice(0, 80)}\``;
+                } else if (block.name === 'Write' && block.input?.file_path) {
+                  detail = `写入文件 \`${path.basename(block.input.file_path)}\``;
+                } else if (block.name === 'Edit' && block.input?.file_path) {
+                  detail = `编辑文件 \`${path.basename(block.input.file_path)}\``;
+                } else {
+                  detail = `\`${block.name}\``;
+                }
+                this._sendCard(chatId, {
+                  schema: '2.0',
+                  config: { width_mode: 'fill' },
+                  header: {
+                    title: { tag: 'plain_text', content: '🔧 执行操作' },
+                    template: 'orange'
+                  },
+                  body: {
+                    elements: [
+                      { tag: 'markdown', content: `Claude 正在执行: ${detail}` }
+                    ]
+                  }
+                }).catch(() => {});
+                break; // One notification per message is enough
+              }
+            }
+          } catch {
+            // Not a valid JSON line, skip
+          }
+        }
+      };
+
+      child.stdout.on('data', onStdout);
       child.stderr.on('data', (d) => { stderr += d.toString(); });
 
       // 5 minute timeout with SIGKILL escalation
