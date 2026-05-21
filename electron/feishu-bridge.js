@@ -203,10 +203,7 @@ class FeishuBridge {
    */
   async stop() {
     this._unwatch();
-    if (this._claudeProcess) {
-      this._claudeProcess.kill('SIGTERM');
-      this._claudeProcess = null;
-    }
+    this._killClaudeProcess('SIGTERM');
     this._processing = false;
     if (this.channel) {
       try {
@@ -329,7 +326,8 @@ class FeishuBridge {
       const response = await this._spawnClaude(
         binding.session_id,
         binding.jsonl_path,
-        messageText
+        messageText,
+        chatId
       );
 
       // Phase 3a: Send formatted card response
@@ -454,6 +452,34 @@ class FeishuBridge {
     }
   }
 
+  // ── Command Helpers ─────────────────────────────────────────────
+
+  /**
+   * Guard: check if a binding exists. If not, send warning card and return false.
+   * Commands that require a bound session call this at the top of their handler.
+   */
+  async _requireBinding(chatId, binding) {
+    if (binding) return true;
+    await this._sendCard(chatId, this._buildWarningCard('😔 未绑定', '当前没有绑定'));
+    return false;
+  }
+
+  /**
+   * Kill the running Claude process and its entire process group.
+   * Uses process.kill(-pid) to ensure child processes (shell commands, tools)
+   * spawned by Claude CLI are also terminated.
+   */
+  _killClaudeProcess(signal = 'SIGTERM') {
+    if (!this._claudeProcess) return;
+    try {
+      process.kill(-this._claudeProcess.pid, signal);
+    } catch {
+      // Process may have already exited; fall back to child.kill()
+      try { this._claudeProcess.kill(signal); } catch {}
+    }
+    this._claudeProcess = null;
+  }
+
   // ── Command Handlers ────────────────────────────────────────────
 
   async _cmdHelp(chatId) {
@@ -536,20 +562,14 @@ class FeishuBridge {
       return;
     }
 
-    this._claudeProcess.kill('SIGTERM');
-    this._claudeProcess = null;
+    this._killClaudeProcess('SIGTERM');
     this._processing = false;
     this._notifyRenderer('feishu:statusChanged', { processing: false });
     await this._sendCard(chatId, this._buildSuccessCard('✅ 已取消', '当前任务已被终止'));
   }
 
   async _cmdNew(chatId, binding) {
-    if (!binding) {
-      await this._sendCard(chatId, this._buildWarningCard(
-        '😔 未绑定', '请先在桌面端绑定一个会话'
-      ));
-      return;
-    }
+    if (!await this._requireBinding(chatId, binding)) return;
 
     // Generate a fresh session ID and update the binding.
     // The new JSONL doesn't exist yet, so next _spawnClaude call
@@ -582,10 +602,7 @@ class FeishuBridge {
   }
 
   async _cmdCd(chatId, args, binding) {
-    if (!binding) {
-      await this._sendCard(chatId, this._buildWarningCard('😔 未绑定', '当前没有绑定'));
-      return;
-    }
+    if (!await this._requireBinding(chatId, binding)) return;
 
     if (!args) {
       const realCwd = this._resolveCwd(binding.jsonl_path) || binding.project_dir;
@@ -665,10 +682,7 @@ class FeishuBridge {
   }
 
   async _cmdHistory(chatId, args, binding) {
-    if (!binding) {
-      await this._sendCard(chatId, this._buildWarningCard('😔 未绑定', '当前没有绑定'));
-      return;
-    }
+    if (!await this._requireBinding(chatId, binding)) return;
 
     if (!fs.existsSync(binding.jsonl_path)) {
       await this._sendCard(chatId, this._buildInfoCard('📭 历史消息', '暂无历史消息（新会话）', 'grey'));
@@ -699,10 +713,7 @@ class FeishuBridge {
   }
 
   async _cmdSessions(chatId, binding) {
-    if (!binding) {
-      await this._sendCard(chatId, this._buildWarningCard('😔 未绑定', '当前没有绑定'));
-      return;
-    }
+    if (!await this._requireBinding(chatId, binding)) return;
 
     const realCwd = this._resolveCwd(binding.jsonl_path) || binding.project_dir;
     const slug = realCwd.replace(/\//g, '-').replace(/_/g, '-');
@@ -754,10 +765,7 @@ class FeishuBridge {
   }
 
   async _cmdSwitch(chatId, args, binding) {
-    if (!binding) {
-      await this._sendCard(chatId, this._buildWarningCard('😔 未绑定', '当前没有绑定'));
-      return;
-    }
+    if (!await this._requireBinding(chatId, binding)) return;
 
     if (!args) {
       await this._sendCard(chatId, this._buildWarningCard(
@@ -835,10 +843,7 @@ class FeishuBridge {
   }
 
   async _cmdRepeat(chatId, binding) {
-    if (!binding) {
-      await this._sendCard(chatId, this._buildWarningCard('😔 未绑定', '当前没有绑定'));
-      return;
-    }
+    if (!await this._requireBinding(chatId, binding)) return;
 
     if (!this._lastMessage) {
       await this._sendCard(chatId, this._buildInfoCard('📭 无消息', '没有上一条消息可重复', 'grey'));
@@ -869,7 +874,8 @@ class FeishuBridge {
       const response = await this._spawnClaude(
         currentBinding.session_id,
         currentBinding.jsonl_path,
-        this._lastMessage
+        this._lastMessage,
+        chatId
       );
 
       await this._sendCard(chatId, this._buildResponseCard(response));
@@ -887,10 +893,7 @@ class FeishuBridge {
   }
 
   async _cmdSystem(chatId, args, binding) {
-    if (!binding) {
-      await this._sendCard(chatId, this._buildWarningCard('😔 未绑定', '当前没有绑定'));
-      return;
-    }
+    if (!await this._requireBinding(chatId, binding)) return;
 
     if (!args) {
       await this._sendCard(chatId, this._buildWarningCard(
@@ -922,7 +925,8 @@ class FeishuBridge {
       const response = await this._spawnClaude(
         currentBinding.session_id,
         currentBinding.jsonl_path,
-        prompt
+        prompt,
+        chatId
       );
 
       await this._sendCard(chatId, this._buildResponseCard(response));
@@ -1017,7 +1021,57 @@ class FeishuBridge {
    * - In group chats: all group members (add bot to groups with caution)
    * Do NOT expose the bot to untrusted users.
    */
-  _spawnClaude(sessionId, jsonlPath, message) {
+  /**
+   * Detect permission prompts in Claude CLI output and auto-approve them.
+   * Sends a notification to the Feishu chat so the user knows what was approved.
+   */
+  _startPermissionWatcher(child, chatId) {
+    let pendingNotification = null;
+
+    const checkOutput = (data) => {
+      const text = data.toString();
+      // Claude CLI permission patterns (both interactive and -p mode)
+      if (/allow|permission|approve|confirm|y\/n|yes\/no|\[y\/n\]|\(y\/n\)/i.test(text)) {
+        // Debounce: don't send duplicate notifications within 3 seconds
+        if (!pendingNotification) {
+          pendingNotification = setTimeout(() => { pendingNotification = null; }, 3000);
+
+          const snippet = text.replace(/\x1b\[[0-9;]*m/g, '').trim().slice(0, 200);
+          console.log(`[feishu] Permission prompt detected: ${snippet}`);
+
+          // Notify Feishu user about the auto-approved action
+          this._sendCard(chatId, {
+            schema: '2.0',
+            config: { width_mode: 'fill' },
+            header: {
+              title: { tag: 'plain_text', content: '🔒 自动批准操作' },
+              template: 'orange'
+            },
+            body: {
+              elements: [
+                { tag: 'markdown', content: 'Claude Code 请求执行需要确认的操作，已自动批准：' },
+                { tag: 'markdown', content: `> ${snippet.replace(/\n/g, '\n> ')}` }
+              ]
+            }
+          }).catch(() => {});
+        }
+
+        // Auto-approve by writing to stdin
+        if (child.stdin && !child.stdin.destroyed) {
+          try {
+            child.stdin.write('y\n');
+          } catch {
+            // stdin may have closed
+          }
+        }
+      }
+    };
+
+    child.stdout.on('data', checkOutput);
+    child.stderr.on('data', checkOutput);
+  }
+
+  _spawnClaude(sessionId, jsonlPath, message, chatId) {
     return new Promise((resolve, reject) => {
       const args = [
         '-p', message,
@@ -1055,6 +1109,7 @@ class FeishuBridge {
 
       const child = spawn(claudeBin, args, {
         cwd: cwd || undefined,
+        detached: true,
         env: {
           ...process.env,
           PATH: resolveShellPath(),
@@ -1064,9 +1119,15 @@ class FeishuBridge {
 
       this._claudeProcess = child;
 
-      // Close stdin immediately — Claude -p reads the prompt from args,
-      // and leaving stdin open causes a 3s "no stdin data" warning.
-      child.stdin.end();
+      // Start permission watcher — detects approval prompts on stdout/stderr,
+      // notifies the Feishu chat, and auto-approves by writing to stdin.
+      if (chatId) {
+        this._startPermissionWatcher(child, chatId);
+      } else {
+        // No chatId → no permission handling needed, close stdin to avoid
+        // the 3s "no stdin data" warning from Claude CLI.
+        child.stdin.end();
+      }
 
       let stdout = '';
       let stderr = '';
@@ -1076,10 +1137,11 @@ class FeishuBridge {
 
       // 5 minute timeout with SIGKILL escalation
       const timer = setTimeout(() => {
-        child.kill('SIGTERM');
+        // Kill the entire process group
+        try { process.kill(-child.pid, 'SIGTERM'); } catch { try { child.kill('SIGTERM'); } catch {} }
         // If SIGTERM doesn't work after 10s, force kill
         const killTimer = setTimeout(() => {
-          try { child.kill('SIGKILL'); } catch {}
+          try { process.kill(-child.pid, 'SIGKILL'); } catch { try { child.kill('SIGKILL'); } catch {} }
         }, 10000);
         killTimer.unref();
         reject(new Error('Claude Code 超时（5分钟）'));
@@ -1142,13 +1204,6 @@ class FeishuBridge {
     } catch (err) {
       console.error('[feishu] Failed to send reply:', err.message);
     }
-  }
-
-  /**
-   * Send a plain text reply to a Feishu chat (fallback).
-   */
-  async _sendMarkdown(chatId, text) {
-    return this._sendReply(chatId, text);
   }
 
   /**
