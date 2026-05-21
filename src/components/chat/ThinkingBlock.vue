@@ -11,7 +11,7 @@
 </template>
 
 <script setup>
-import { ref, computed, defineExpose } from 'vue';
+import { ref, computed } from 'vue';
 
 const props = defineProps({
   block: {

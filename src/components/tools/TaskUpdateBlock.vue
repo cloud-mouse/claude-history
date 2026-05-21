@@ -29,7 +29,7 @@
 </template>
 
 <script setup>
-import { computed, defineExpose } from 'vue';
+import { computed } from 'vue';
 
 const props = defineProps({
   block: {

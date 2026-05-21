@@ -83,7 +83,7 @@
 </template>
 
 <script setup>
-import { computed, ref, defineExpose } from 'vue';
+import { computed, ref } from 'vue';
 import { renderMarkdown, parseCommandContent } from '../../utils/markdown.js';
 import ToolCall from '../tools/ToolCall.vue';
 import ToolResult from '../tools/ToolResult.vue';

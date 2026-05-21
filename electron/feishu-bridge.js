@@ -11,6 +11,45 @@ const { createLarkChannel, Client } = require('@larksuiteoapi/node-sdk');
 const CC_DIR = () => path.join(os.homedir(), '.cc-connect');
 
 /**
+ * Resolve the full PATH from the user's login shell.
+ * Packaged Electron apps get a minimal PATH that lacks node/nvm/brew paths.
+ * We cache the result so we only shell out once.
+ */
+let _cachedShellPath = null;
+function resolveShellPath() {
+  if (_cachedShellPath) return _cachedShellPath;
+
+  try {
+    _cachedShellPath = execSync(
+      `${process.env.SHELL || '/bin/zsh'} -l -c 'echo $PATH'`,
+      { encoding: 'utf-8', timeout: 5000 }
+    ).trim();
+    return _cachedShellPath;
+  } catch (_) { /* fall through */ }
+
+  // Fallback: assemble common paths manually
+  const home = os.homedir();
+  const paths = [
+    '/usr/local/bin',
+    '/opt/homebrew/bin',
+    `${home}/.nvm/versions/node/default/bin`,
+  ];
+  // Add all nvm version bin dirs
+  try {
+    const nvmDir = path.join(home, '.nvm/versions/node');
+    if (fs.existsSync(nvmDir)) {
+      for (const ver of fs.readdirSync(nvmDir)) {
+        paths.push(path.join(nvmDir, ver, 'bin'));
+      }
+    }
+  } catch (_) { /* ignore */ }
+  paths.push(process.env.PATH || '');
+
+  _cachedShellPath = paths.filter(Boolean).join(':');
+  return _cachedShellPath;
+}
+
+/**
  * Resolve the full path to the `claude` CLI binary.
  * Electron apps don't inherit the user's shell PATH (nvm, brew, etc.),
  * so we resolve it explicitly before spawning.
@@ -958,7 +997,10 @@ class FeishuBridge {
 
       const child = spawn(claudeBin, args, {
         cwd: cwd || undefined,
-        env: { ...process.env },
+        env: {
+          ...process.env,
+          PATH: resolveShellPath(),
+        },
         stdio: ['pipe', 'pipe', 'pipe']
       });
 
@@ -1120,12 +1162,7 @@ class FeishuBridge {
           {
             tag: 'hr'
           },
-          {
-            tag: 'note',
-            elements: [
-              { tag: 'plain_text', content: '由 Claude Code 飞书桥接驱动' }
-            ]
-          }
+          { tag: 'markdown', content: '_由 Claude Code 飞书桥接驱动_' }
         ]
       }
     };
