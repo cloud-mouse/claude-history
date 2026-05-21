@@ -326,8 +326,7 @@ class FeishuBridge {
       const response = await this._spawnClaude(
         binding.session_id,
         binding.jsonl_path,
-        messageText,
-        chatId
+        messageText
       );
 
       // Phase 3a: Send formatted card response
@@ -874,8 +873,7 @@ class FeishuBridge {
       const response = await this._spawnClaude(
         currentBinding.session_id,
         currentBinding.jsonl_path,
-        this._lastMessage,
-        chatId
+        this._lastMessage
       );
 
       await this._sendCard(chatId, this._buildResponseCard(response));
@@ -925,8 +923,7 @@ class FeishuBridge {
       const response = await this._spawnClaude(
         currentBinding.session_id,
         currentBinding.jsonl_path,
-        prompt,
-        chatId
+        prompt
       );
 
       await this._sendCard(chatId, this._buildResponseCard(response));
@@ -1021,62 +1018,15 @@ class FeishuBridge {
    * - In group chats: all group members (add bot to groups with caution)
    * Do NOT expose the bot to untrusted users.
    */
-  /**
-   * Detect permission prompts in Claude CLI output and auto-approve them.
-   * Sends a notification to the Feishu chat so the user knows what was approved.
-   */
-  _startPermissionWatcher(child, chatId) {
-    let pendingNotification = null;
-
-    const checkOutput = (data) => {
-      const text = data.toString();
-      // Claude CLI permission patterns (both interactive and -p mode)
-      if (/allow|permission|approve|confirm|y\/n|yes\/no|\[y\/n\]|\(y\/n\)/i.test(text)) {
-        // Debounce: don't send duplicate notifications within 3 seconds
-        if (!pendingNotification) {
-          pendingNotification = setTimeout(() => { pendingNotification = null; }, 3000);
-
-          const snippet = text.replace(/\x1b\[[0-9;]*m/g, '').trim().slice(0, 200);
-          console.log(`[feishu] Permission prompt detected: ${snippet}`);
-
-          // Notify Feishu user about the auto-approved action
-          this._sendCard(chatId, {
-            schema: '2.0',
-            config: { width_mode: 'fill' },
-            header: {
-              title: { tag: 'plain_text', content: '🔒 自动批准操作' },
-              template: 'orange'
-            },
-            body: {
-              elements: [
-                { tag: 'markdown', content: 'Claude Code 请求执行需要确认的操作，已自动批准：' },
-                { tag: 'markdown', content: `> ${snippet.replace(/\n/g, '\n> ')}` }
-              ]
-            }
-          }).catch(() => {});
-        }
-
-        // Auto-approve by writing to stdin
-        if (child.stdin && !child.stdin.destroyed) {
-          try {
-            child.stdin.write('y\n');
-          } catch {
-            // stdin may have closed
-          }
-        }
-      }
-    };
-
-    child.stdout.on('data', checkOutput);
-    child.stderr.on('data', checkOutput);
-  }
-
-  _spawnClaude(sessionId, jsonlPath, message, chatId) {
+  _spawnClaude(sessionId, jsonlPath, message) {
     return new Promise((resolve, reject) => {
       const args = [
         '-p', message,
         '--output-format', 'json',
-        '--permission-mode', 'acceptEdits'
+        // bypassPermissions: skip all permission prompts entirely.
+        // Safe here because the Feishu bot's message access IS the trust boundary —
+        // anyone who can message the bot already has full control over the project.
+        '--permission-mode', 'bypassPermissions'
       ];
 
       // Model override
@@ -1119,15 +1069,10 @@ class FeishuBridge {
 
       this._claudeProcess = child;
 
-      // Start permission watcher — detects approval prompts on stdout/stderr,
-      // notifies the Feishu chat, and auto-approves by writing to stdin.
-      if (chatId) {
-        this._startPermissionWatcher(child, chatId);
-      } else {
-        // No chatId → no permission handling needed, close stdin to avoid
-        // the 3s "no stdin data" warning from Claude CLI.
-        child.stdin.end();
-      }
+      // Close stdin — Claude -p reads the prompt from args,
+      // and leaving stdin open causes a 3s "no stdin data" warning.
+      // With bypassPermissions, no approval input is ever needed.
+      child.stdin.end();
 
       let stdout = '';
       let stderr = '';
