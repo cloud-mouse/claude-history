@@ -13,6 +13,7 @@ layout: page
     <span class="tag">代码高亮</span>
     <span class="tag">主题切换</span>
     <span class="tag">会话恢复</span>
+    <span class="tag">飞书桥连</span>
   </div>
   <div class="cta">
     <a href="https://github.com/cloud-mouse/claude-history" class="primary-btn">立即下载</a>
@@ -71,6 +72,21 @@ layout: page
       <div class="feature-icon">🖼️</div>
       <h3>截图预览</h3>
       <p>图片点击放大预览</p>
+    </div>
+    <div class="feature-card animate-on-scroll">
+      <div class="feature-icon">🐦</div>
+      <h3>飞书桥连</h3>
+      <p>通过飞书机器人远程与 Claude Code 对话，支持命令、模型切换、会话绑定</p>
+    </div>
+    <div class="feature-card animate-on-scroll">
+      <div class="feature-icon">🔍</div>
+      <h3>对话搜索</h3>
+      <p>在对话列表中按关键词快速过滤</p>
+    </div>
+    <div class="feature-card animate-on-scroll">
+      <div class="feature-icon">📦</div>
+      <h3>跨平台</h3>
+      <p>支持 macOS、Windows、Linux，自动构建与发布</p>
     </div>
   </div>
 </div>
