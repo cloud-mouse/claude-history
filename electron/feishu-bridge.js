@@ -3,11 +3,52 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { execSync } = require('child_process');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
 const { createLarkChannel, Client } = require('@larksuiteoapi/node-sdk');
 
 const CC_DIR = () => path.join(os.homedir(), '.cc-connect');
+
+/**
+ * Resolve the full path to the `claude` CLI binary.
+ * Electron apps don't inherit the user's shell PATH (nvm, brew, etc.),
+ * so we resolve it explicitly before spawning.
+ */
+function resolveClaudeBinary() {
+  // 1. Try the user's login shell PATH
+  try {
+    const shellPath = execSync(
+      `${process.env.SHELL || '/bin/zsh'} -l -c 'which claude'`,
+      { encoding: 'utf-8', timeout: 5000 }
+    ).trim();
+    if (shellPath && fs.existsSync(shellPath)) return shellPath;
+  } catch (_) { /* not found via shell */ }
+
+  // 2. Common locations
+  const home = os.homedir();
+  const candidates = [
+    '/usr/local/bin/claude',
+    '/opt/homebrew/bin/claude',
+    path.join(home, '.nvm/versions/node/default/bin/claude'),
+  ];
+  // Also glob nvm versions
+  try {
+    const nvmDir = path.join(home, '.nvm/versions/node');
+    if (fs.existsSync(nvmDir)) {
+      for (const ver of fs.readdirSync(nvmDir)) {
+        candidates.push(path.join(nvmDir, ver, 'bin', 'claude'));
+      }
+    }
+  } catch (_) { /* ignore */ }
+
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+
+  // 3. Fallback — rely on system PATH
+  return 'claude';
+}
 
 class FeishuBridge {
   constructor(store, mainWindow) {
@@ -912,9 +953,10 @@ class FeishuBridge {
         console.log(`[feishu] Could not resolve cwd from ${jsonlPath}, starting new conversation`);
       }
 
-      console.log(`[feishu] Spawning claude ${args.join(' ')} in ${cwd || 'default cwd'}`);
+      const claudeBin = resolveClaudeBinary();
+      console.log(`[feishu] Spawning ${claudeBin} ${args.join(' ')} in ${cwd || 'default cwd'}`);
 
-      const child = spawn('claude', args, {
+      const child = spawn(claudeBin, args, {
         cwd: cwd || undefined,
         env: { ...process.env },
         stdio: ['pipe', 'pipe', 'pipe']
