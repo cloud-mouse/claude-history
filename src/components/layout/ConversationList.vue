@@ -17,6 +17,7 @@
           @click="onSelect(conv)"
         >
           <div class="conv-main">
+            <span v-if="feishuStore.isBound(conv.filePath)" class="binding-dot" title="已绑定飞书"></span>
             <span class="conv-title">{{ cleanTitle(titleMap[conv.filePath] || conv.title) || '未命名' }}</span>
             <span v-if="conv.fileSize > 50 * 1024 * 1024" class="large-file-badge">大文件</span>
           </div>
@@ -50,6 +51,8 @@ import { cleanTitle } from '../../utils/title-extractor.js';
 import { useConversationsStore } from '../../stores/conversations.js';
 import SearchBar from '../common/SearchBar.vue';
 import ConfirmDialog from '../common/ConfirmDialog.vue';
+import { useFeishuStore } from '../../stores/feishu';
+const feishuStore = useFeishuStore();
 
 const conversationsStore = useConversationsStore();
 const titleMap = conversationsStore.titleMap;
@@ -166,6 +169,17 @@ function formatDate(timestamp) {
   align-items: center;
   gap: 8px;
   margin-bottom: 4px;
+}
+
+.binding-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #4caf50; flex-shrink: 0;
+  box-shadow: 0 0 6px #4caf5088;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 .conv-title {

@@ -16,8 +16,23 @@
             <span class="message-count">{{ messageCount }} 条消息</span>
           </div>
           <span class="conversation-date">{{ conversationTime }}</span>
+          <span v-if="remoteSession" :class="['remote-badge', remoteSession.active ? 'active' : 'idle']">
+            <span :class="['status-dot-inline', remoteSession.active ? 'green' : 'yellow']"></span>
+            {{ remoteSession.platform === 'feishu' ? '飞书' : '远程' }} {{ remoteSession.active ? '活跃' : '空闲' }}
+          </span>
+        </div>
+        <div v-if="remoteSession && remoteSession.bound" class="session-bind-info">
+          <span class="bind-icon">🔗</span>
+          <span class="bind-text">绑定会话: <code>{{ sessionIdShort }}</code></span>
         </div>
         <div class="thread-header-left">
+          <button v-if="canBindToFeishu" class="bind-btn" @click="bindToFeishu" :disabled="binding" :title="bindTooltip">
+            <span class="bind-btn-icon">🐦</span>
+            {{ binding ? '绑定中...' : (remoteSession ? '已绑定' : '绑定到飞书') }}
+          </button>
+          <span v-if="bindResult" :class="['bind-feedback', bindResult.success ? 'success' : 'error']">
+            {{ bindResult.success ? '✓' : '✗' }} {{ bindResult.message }}
+          </span>
           <button class="resume-btn" @click="resumeConversation" title="在终端中恢复会话">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -92,6 +107,7 @@ import SkeletonLoader from '../common/SkeletonLoader.vue';
 import ChatBubble from '../chat/ChatBubble.vue';
 import PermissionBadge from '../chat/PermissionBadge.vue';
 import FileSnapshot from '../chat/FileSnapshot.vue';
+import { useFeishuStore } from '../../stores/feishu';
 
 const props = defineProps({
   conversation: Object,
@@ -101,6 +117,8 @@ const props = defineProps({
     default: 0
   }
 });
+
+const feishuStore = useFeishuStore();
 
 const messagesContainer = ref(null);
 const allExpanded = ref(false);
@@ -112,7 +130,7 @@ const showBackToTop = ref(false);
 const resumeCommand = computed(() => {
   if (!props.conversation?.filePath) return '';
   const fileName = props.conversation.filePath.split('/').pop().replace('.jsonl', '');
-  const projectDir = props.conversation.filePath.split('/').slice(0, -1).join('/');
+  const projectDir = props.conversation.projectDir || props.conversation.filePath.split('/').slice(0, -1).join('/');
   return `cd "${projectDir}" && claude --resume ${fileName}`;
 });
 
@@ -152,13 +170,13 @@ const conversationTime = computed(() => {
 // Resume conversation in terminal
 function resumeConversation() {
   if (props.conversation?.filePath) {
-    window.electronAPI.resumeConversation(props.conversation.filePath);
+    window.electronAPI.resumeConversation(props.conversation.filePath, props.conversation.projectDir);
   }
 }
 
 // Copy resume command
 function copyCommand() {
-  const cmd = `claude --resume ${props.conversation?.filePath?.split('/').pop()?.replace('.jsonl', '')}`;
+  const cmd = resumeCommand.value;
   navigator.clipboard.writeText(cmd).then(() => {
     commandCopied.value = true;
     setTimeout(() => {
@@ -179,6 +197,57 @@ const messageCount = computed(() => {
     m.role === 'user' || m.role === 'assistant' || m.type === 'tool_result'
   ).length;
 });
+
+const remoteSession = computed(() => {
+  if (!props.conversation?.filePath) return null;
+  return feishuStore.binding?.jsonlPath === props.conversation.filePath ? feishuStore.binding : null;
+});
+
+const sessionIdShort = computed(() => {
+  if (!remoteSession.value?.sessionId) return '';
+  const id = remoteSession.value.sessionId;
+  return id.length > 16 ? id.slice(0, 8) + '...' + id.slice(-8) : id;
+});
+
+// Extract the agent session ID from the JSONL file path
+const agentSessionId = computed(() => {
+  if (!props.conversation?.filePath) return null;
+  const fileName = props.conversation.filePath.split('/').pop();
+  return fileName?.replace('.jsonl', '') || null;
+});
+
+// Can bind to Feishu: Feishu is connected and session ID exists
+const canBindToFeishu = computed(() => {
+  return feishuStore.connected && agentSessionId.value;
+});
+
+const bindTooltip = computed(() => {
+  if (!feishuStore.connected) return '请先在设置中启用飞书桥接';
+  if (remoteSession.value) return '此会话已绑定到飞书远程会话';
+  return '将此会话绑定到飞书，下次飞书消息将进入此会话';
+});
+
+const binding = ref(false);
+const bindResult = ref(null); // { success: boolean, message: string }
+
+async function bindToFeishu() {
+  if (!agentSessionId.value || binding.value) return;
+  binding.value = true;
+  bindResult.value = null;
+  try {
+    const result = await feishuStore.bindSession(props.conversation.filePath);
+    if (result.success) {
+      bindResult.value = { success: true, message: result.message || '已绑定到飞书' };
+    } else {
+      bindResult.value = { success: false, message: result.error || '绑定失败' };
+    }
+  } catch (err) {
+    bindResult.value = { success: false, message: err.message || '绑定失败' };
+  } finally {
+    binding.value = false;
+    setTimeout(() => { bindResult.value = null; }, 4000);
+  }
+}
 
 function setBubbleRef(index, el) {
   if (el) {
@@ -475,5 +544,117 @@ function scrollToTop() {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* Remote session badge */
+.remote-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-weight: 500;
+  margin-left: 8px;
+}
+
+.remote-badge.active {
+  background: rgba(34, 197, 94, 0.1);
+  color: var(--color-success);
+}
+
+.remote-badge.idle {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--color-warning);
+}
+
+.status-dot-inline {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-dot-inline.green {
+  background: var(--color-success);
+  box-shadow: 0 0 4px var(--color-success);
+}
+
+.status-dot-inline.yellow {
+  background: var(--color-warning);
+}
+
+/* Session bind info */
+.session-bind-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  margin-left: 8px;
+  margin-top: 2px;
+}
+
+.bind-icon {
+  font-size: 12px;
+}
+
+.bind-text code {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  background: var(--bg-tertiary);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* Bind to Feishu button */
+.bind-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  font-family: inherit;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.bind-btn:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--primary);
+}
+
+.bind-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.bind-btn-icon {
+  font-size: 13px;
+}
+
+.bind-feedback {
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  animation: fadeIn 0.3s ease;
+}
+
+.bind-feedback.success {
+  color: var(--color-success);
+}
+
+.bind-feedback.error {
+  color: var(--color-error);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 </style>

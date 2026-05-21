@@ -41,6 +41,13 @@
         :style="{ width: middleCollapsed ? '0px' : middlePanelWidth + 'px' }"
       >
         <div class="panel-header-actions">
+          <button class="settings-btn" @click="showSettings = true" title="设置"
+            :class="{ connected: feishuStore.connected }">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
+            </svg>
+          </button>
           <ThemeSelector />
         </div>
         <ConversationList
@@ -77,6 +84,8 @@
         />
       </main>
     </div>
+
+    <SettingsModal :show="showSettings" @close="showSettings = false" />
   </div>
 </template>
 
@@ -89,10 +98,15 @@ import ProjectList from './components/layout/ProjectList.vue';
 import ConversationList from './components/layout/ConversationList.vue';
 import MessageThread from './components/layout/MessageThread.vue';
 import ThemeSelector from './components/common/ThemeSelector.vue';
+import SettingsModal from './components/feishu/SettingsModal.vue';
+import { useFeishuStore } from './stores/feishu';
 
 const projectsStore = useProjectsStore();
 const conversationsStore = useConversationsStore();
 const themeStore = useThemeStore();
+const feishuStore = useFeishuStore();
+
+const showSettings = ref(false);
 
 const leftPanelWidth = ref(240);
 const middlePanelWidth = ref(300);
@@ -182,6 +196,18 @@ function stopResize() {
 onMounted(() => {
   themeStore.initTheme();
   projectsStore.loadProjects();
+  feishuStore.detect();
+
+  // Register event listeners for real-time updates
+  window.electronAPI.onFeishuStatusChanged((data) => {
+    feishuStore.handleStatusChanged(data);
+  });
+  window.electronAPI.onFeishuJsonlChanged((data) => {
+    // Reload current conversation if it matches
+    if (conversationsStore.activeConversation?.filePath === data.jsonlPath) {
+      conversationsStore.openConversation(conversationsStore.activeConversation);
+    }
+  });
 });
 </script>
 
@@ -222,6 +248,33 @@ onMounted(() => {
   padding: 12px 16px;
   border-bottom: 1px solid var(--border-light);
   background: var(--bg-secondary);
+  gap: 6px;
+  align-items: center;
+}
+
+.settings-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+}
+
+.settings-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--primary);
+}
+
+.settings-btn.connected {
+  color: var(--color-success);
+  border-color: var(--color-success);
 }
 
 .panel-divider {

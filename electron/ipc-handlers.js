@@ -150,7 +150,7 @@ function registerIpcHandlers() {
       // Check cache first
       const cached = getFromCache(filePath);
       if (cached) {
-        return { success: true, messages: cached, fromCache: true };
+        return { success: true, messages: cached.messages, projectDir: cached.projectDir, fromCache: true };
       }
 
       // If there's already a pending request for this file, await it
@@ -161,12 +161,18 @@ function registerIpcHandlers() {
       // Create the parsing promise
       const parsePromise = (async () => {
         const messages = [];
+        let projectDir = null;
         await parseStream(filePath, (raw) => {
+          // Extract cwd from first user message
+          if (!projectDir && raw.type === 'user' && raw.cwd) {
+            projectDir = raw.cwd;
+          }
           const parsed = parseMessage(raw);
           messages.push(parsed);
         });
-        addToCache(filePath, messages);
-        return { success: true, messages, fromCache: false };
+        const data = { messages, projectDir };
+        addToCache(filePath, data);
+        return { success: true, messages, projectDir, fromCache: false };
       })();
 
       pendingRequests.set(filePath, parsePromise);
@@ -279,10 +285,10 @@ function registerIpcHandlers() {
   });
 
   // 9. resume-conversation — Open terminal with claude --resume command
-  ipcMain.handle('resume-conversation', async (_, filePath) => {
+  ipcMain.handle('resume-conversation', async (_, filePath, projectDir) => {
     try {
       const fileName = path.basename(filePath, '.jsonl');
-      const projectDir = path.dirname(filePath);
+      const workDir = projectDir || path.dirname(filePath);
       const command = `claude --resume ${fileName}`;
 
       // Detect platform and open terminal with command
@@ -291,13 +297,13 @@ function registerIpcHandlers() {
 
       let terminalCommand;
       if (isMac) {
-        terminalCommand = `osascript -e 'tell app "Terminal" to do script "cd ${projectDir.replace(/'/g, "'\\''")} && ${command}"'`;
+        terminalCommand = `osascript -e 'tell app "Terminal" to do script "cd ${workDir.replace(/'/g, "'\\''")} && ${command}"'`;
       } else if (isLinux) {
         // Try common terminal emulators
-        terminalCommand = `bash -c 'cd "${projectDir}" && ${command}; exec bash' &`;
+        terminalCommand = `bash -c 'cd "${workDir}" && ${command}; exec bash' &`;
       } else {
         // Windows - use cmd
-        terminalCommand = `start cmd /k "cd /d ${projectDir} && ${command}"`;
+        terminalCommand = `start cmd /k "cd /d ${workDir} && ${command}"`;
       }
 
       exec(terminalCommand, (err) => {
@@ -316,4 +322,4 @@ function registerIpcHandlers() {
   console.log('[ipc-handlers] All handlers registered');
 }
 
-module.exports = { registerIpcHandlers };
+module.exports = { registerIpcHandlers, getStore };

@@ -13,6 +13,7 @@
         </svg>
       </span>
       <span class="role-label">{{ roleLabel }}</span>
+      <span v-if="source === 'feishu'" class="source-badge">🐦 来自飞书</span>
       <span v-if="formattedTime" class="bubble-time">{{ formattedTime }}</span>
     </div>
     <div class="bubble-content">
@@ -112,6 +113,10 @@ const props = defineProps({
   },
   timestamp: {
     type: [String, Number],
+    default: null
+  },
+  source: {
+    type: String,
     default: null
   }
 });
@@ -270,6 +275,15 @@ defineExpose({ expandAll, collapseAll });
 .role-label {
   font-size: var(--font-size-xs);
   color: var(--text-muted);
+}
+
+.source-badge {
+  font-size: 10px;
+  color: var(--color-success);
+  background: rgba(34, 197, 94, 0.1);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  font-weight: 500;
 }
 
 .bubble-time {

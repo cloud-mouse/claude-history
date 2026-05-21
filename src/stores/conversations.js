@@ -30,6 +30,7 @@ export const useConversationsStore = defineStore('conversations', () => {
             title: cleanTitle(conv.title) || '',
             updatedAt: conv.updatedAt,
             messages: result.messages || [],
+            projectDir: result.projectDir || null,
             skippedCount: 0
           };
           if (cache.size >= 20) {

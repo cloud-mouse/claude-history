@@ -28,9 +28,37 @@ class Store {
         title      TEXT
       );
 
+      CREATE TABLE IF NOT EXISTS feishu_config (
+        id         INTEGER PRIMARY KEY CHECK (id = 1),
+        app_id     TEXT NOT NULL DEFAULT '',
+        app_secret TEXT NOT NULL DEFAULT '',
+        enabled    INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS feishu_bindings (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        chat_id     TEXT NOT NULL,
+        chat_type   TEXT NOT NULL DEFAULT 'p2p',
+        jsonl_path  TEXT NOT NULL UNIQUE,
+        session_id  TEXT NOT NULL,
+        project_dir TEXT NOT NULL,
+        active      INTEGER NOT NULL DEFAULT 1,
+        created_at  INTEGER NOT NULL,
+        updated_at  INTEGER NOT NULL
+      );
+
       CREATE INDEX IF NOT EXISTS idx_conversations_project_id ON conversations(project_id);
       CREATE INDEX IF NOT EXISTS idx_conversations_updated_at ON conversations(updated_at);
+      CREATE INDEX IF NOT EXISTS idx_feishu_bindings_jsonl ON feishu_bindings(jsonl_path);
     `);
+
+    // Migration: drop stale unique index on chat_id (was causing rebind failures)
+    try {
+      this.db.exec('DROP INDEX IF EXISTS idx_feishu_bindings_chat');
+    } catch (e) {
+      // Ignore if already dropped
+    }
   }
 
   upsertProject(name, projectPath) {
@@ -49,6 +77,25 @@ class Store {
   getProjectByPath(projectPath) {
     const stmt = this.db.prepare('SELECT * FROM projects WHERE path = ?');
     return stmt.get(projectPath) || null;
+  }
+
+  getProjectById(id) {
+    const stmt = this.db.prepare('SELECT * FROM projects WHERE id = ?');
+    return stmt.get(id) || null;
+  }
+
+  /**
+   * Derive the real project directory for a JSONL file path.
+   * Looks up the conversation → project to get the actual working directory
+   * where Claude Code should be spawned.
+   */
+  getProjectDirForJsonl(jsonlPath) {
+    const conv = this.getConversationByFilePath(jsonlPath);
+    if (conv) {
+      const project = this.getProjectById(conv.project_id);
+      if (project) return project.path;
+    }
+    return null;
   }
 
   getAllProjects() {
@@ -125,6 +172,98 @@ class Store {
 
   close() {
     this.db.close();
+  }
+
+  // ── Feishu config ──────────────────────────────────────────────
+
+  getFeishuConfig() {
+    const row = this.db.prepare('SELECT * FROM feishu_config WHERE id = 1').get();
+    return row || { app_id: '', app_secret: '', enabled: 0 };
+  }
+
+  saveFeishuConfig(appId, appSecret) {
+    const now = Date.now();
+    this.db.prepare(`
+      INSERT INTO feishu_config (id, app_id, app_secret, enabled, updated_at)
+      VALUES (1, ?, ?, 1, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        app_id = excluded.app_id,
+        app_secret = excluded.app_secret,
+        updated_at = excluded.updated_at
+    `).run(appId, appSecret, now);
+  }
+
+  setFeishuEnabled(enabled) {
+    const now = Date.now();
+    this.db.prepare(`
+      UPDATE feishu_config SET enabled = ?, updated_at = ? WHERE id = 1
+    `).run(enabled ? 1 : 0, now);
+  }
+
+  // ── Feishu bindings ────────────────────────────────────────────
+
+  createBinding(chatId, chatType, jsonlPath, sessionId, projectDir) {
+    // Deactivate any existing binding first
+    this.db.prepare('UPDATE feishu_bindings SET active = 0 WHERE active = 1').run();
+
+    // Remove old rows with the same chat_id to avoid stale data
+    this.db.prepare('DELETE FROM feishu_bindings WHERE chat_id = ? AND jsonl_path != ?').run(chatId, jsonlPath);
+
+    const now = Date.now();
+    this.db.prepare(`
+      INSERT INTO feishu_bindings (chat_id, chat_type, jsonl_path, session_id, project_dir, active, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+      ON CONFLICT(jsonl_path) DO UPDATE SET
+        chat_id = excluded.chat_id,
+        chat_type = excluded.chat_type,
+        session_id = excluded.session_id,
+        project_dir = excluded.project_dir,
+        active = 1,
+        updated_at = excluded.updated_at
+    `).run(chatId, chatType, jsonlPath, sessionId, projectDir, now, now);
+  }
+
+  getBindingByChatId(chatId) {
+    return this.db.prepare('SELECT * FROM feishu_bindings WHERE chat_id = ? AND active = 1').get(chatId) || null;
+  }
+
+  getBindingByJsonlPath(jsonlPath) {
+    return this.db.prepare('SELECT * FROM feishu_bindings WHERE jsonl_path = ? AND active = 1').get(jsonlPath) || null;
+  }
+
+  getActiveBinding() {
+    return this.db.prepare('SELECT * FROM feishu_bindings WHERE active = 1').get() || null;
+  }
+
+  deactivateAllBindings() {
+    this.db.prepare('UPDATE feishu_bindings SET active = 0').run();
+  }
+
+  /**
+   * Update specific fields of an active binding identified by chatId.
+   */
+  updateBinding(chatId, fields) {
+    const allowed = ['session_id', 'jsonl_path', 'project_dir', 'chat_type'];
+    const sets = [];
+    const values = [];
+
+    for (const [key, value] of Object.entries(fields)) {
+      if (allowed.includes(key)) {
+        sets.push(`${key} = ?`);
+        values.push(value);
+      }
+    }
+
+    if (sets.length === 0) return;
+
+    const now = Date.now();
+    sets.push('updated_at = ?');
+    values.push(now);
+    values.push(chatId);
+
+    this.db.prepare(
+      `UPDATE feishu_bindings SET ${sets.join(', ')} WHERE chat_id = ? AND active = 1`
+    ).run(...values);
   }
 }
 

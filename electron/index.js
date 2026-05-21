@@ -1,8 +1,11 @@
-const { app, BrowserWindow, Menu } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain } = require('electron');
 const path = require('path');
 const { registerIpcHandlers } = require('./ipc-handlers');
+const { registerFeishuIpc } = require('./feishu-ipc');
+const { FeishuBridge } = require('./feishu-bridge');
 
 let mainWindow;
+let feishuBridge = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -28,6 +31,14 @@ function createWindow() {
 
   // Register IPC handlers after window creation
   registerIpcHandlers();
+
+  // Initialize Feishu bridge
+  const store = getStore();
+  feishuBridge = new FeishuBridge(store, mainWindow);
+  registerFeishuIpc(ipcMain, feishuBridge, store);
+
+  // Migrate credentials from cc-connect if available
+  feishuBridge.migrateFromCcConnect();
 }
 
 // Create application menu with keyboard shortcuts
@@ -73,13 +84,37 @@ function createMenu() {
   Menu.setApplicationMenu(menu);
 }
 
+function getStore() {
+  // Access the store instance from ipc-handlers
+  return require('./ipc-handlers').getStore();
+}
+
 app.whenReady().then(() => {
   createWindow();
   createMenu();
+
+  // Auto-start Feishu bridge if configured
+  try {
+    const store = getStore();
+    const config = store.getFeishuConfig();
+    if (config && config.app_id && config.enabled) {
+      feishuBridge.start().catch(err => {
+        console.error('[feishu] Auto-start failed:', err.message);
+      });
+    }
+  } catch (e) {
+    // Store might not be ready yet
+  }
 });
 
 app.on('window-all-closed', () => {
   app.quit();
+});
+
+app.on('before-quit', async () => {
+  if (feishuBridge) {
+    await feishuBridge.stop();
+  }
 });
 
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
