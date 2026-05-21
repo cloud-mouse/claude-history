@@ -16,12 +16,12 @@
             <span class="message-count">{{ messageCount }} 条消息</span>
           </div>
           <span class="conversation-date">{{ conversationTime }}</span>
-          <span v-if="remoteSession" :class="['remote-badge', remoteSession.active ? 'active' : 'idle']">
-            <span :class="['status-dot-inline', remoteSession.active ? 'green' : 'yellow']"></span>
-            {{ remoteSession.platform === 'feishu' ? '飞书' : '远程' }} {{ remoteSession.active ? '活跃' : '空闲' }}
+          <span v-if="remoteSession" :class="['remote-badge', feishuStore.processing ? 'active' : 'idle']">
+            <span :class="['status-dot-inline', feishuStore.processing ? 'green' : 'yellow']"></span>
+            飞书 {{ feishuStore.processing ? '活跃' : '空闲' }}
           </span>
         </div>
-        <div v-if="remoteSession && remoteSession.bound" class="session-bind-info">
+        <div v-if="remoteSession" class="session-bind-info">
           <span class="bind-icon">🔗</span>
           <span class="bind-text">绑定会话: <code>{{ sessionIdShort }}</code></span>
         </div>
@@ -68,6 +68,7 @@
               :blocks="message.blocks || [message]"
               :role="message.role === 'tool_result' ? 'assistant' : message.role"
               :timestamp="message.timestamp"
+              :source="remoteSession && message.role === 'user' ? 'feishu' : null"
               :ref="el => setBubbleRef(index, el)"
             />
             <PermissionBadge

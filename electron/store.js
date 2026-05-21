@@ -183,14 +183,28 @@ class Store {
 
   saveFeishuConfig(appId, appSecret) {
     const now = Date.now();
-    this.db.prepare(`
-      INSERT INTO feishu_config (id, app_id, app_secret, enabled, updated_at)
-      VALUES (1, ?, ?, 1, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        app_id = excluded.app_id,
-        app_secret = excluded.app_secret,
-        updated_at = excluded.updated_at
-    `).run(appId, appSecret, now);
+    if (appSecret != null && appSecret !== '') {
+      // Full save: both appId and appSecret provided
+      this.db.prepare(`
+        INSERT INTO feishu_config (id, app_id, app_secret, enabled, updated_at)
+        VALUES (1, ?, ?, 1, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          app_id = excluded.app_id,
+          app_secret = excluded.app_secret,
+          enabled = 1,
+          updated_at = excluded.updated_at
+      `).run(appId, appSecret, now);
+    } else {
+      // Partial save: only update appId, preserve existing app_secret
+      this.db.prepare(`
+        INSERT INTO feishu_config (id, app_id, app_secret, enabled, updated_at)
+        VALUES (1, ?, '', 1, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          app_id = excluded.app_id,
+          enabled = 1,
+          updated_at = excluded.updated_at
+      `).run(appId, now);
+    }
   }
 
   setFeishuEnabled(enabled) {

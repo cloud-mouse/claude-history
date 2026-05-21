@@ -1353,24 +1353,47 @@ class FeishuBridge {
     this._unwatch();
 
     if (!binding || !binding.jsonl_path) return;
-    if (!fs.existsSync(binding.jsonl_path)) return;
 
-    try {
-      this._watcher = fs.watch(binding.jsonl_path, (eventType) => {
-        if (eventType === 'change') {
-          // Debounce: wait 500ms before notifying (Claude Code writes multiple times)
-          clearTimeout(this._watchDebounce);
-          this._watchDebounce = setTimeout(() => {
+    const jsonlPath = binding.jsonl_path;
+    const dir = path.dirname(jsonlPath);
+    const fileName = path.basename(jsonlPath);
+
+    if (fs.existsSync(jsonlPath)) {
+      // File exists, watch it directly
+      try {
+        this._watcher = fs.watch(jsonlPath, (eventType) => {
+          if (eventType === 'change') {
+            clearTimeout(this._watchDebounce);
+            this._watchDebounce = setTimeout(() => {
+              this._notifyRenderer('feishu:jsonlChanged', {
+                jsonlPath: binding.jsonl_path,
+                sessionId: binding.session_id
+              });
+            }, 500);
+          }
+        });
+        console.log(`[feishu] Watching ${jsonlPath}`);
+      } catch (err) {
+        console.error('[feishu] Failed to watch file:', err.message);
+      }
+    } else if (fs.existsSync(dir)) {
+      // File doesn't exist yet (e.g. after /new or /cd), watch directory for creation
+      this._pendingWatch = { binding, fileName };
+      try {
+        this._watcher = fs.watch(dir, (eventType, changedFile) => {
+          if (changedFile === fileName && fs.existsSync(jsonlPath)) {
+            // File appeared — switch to direct file watching
+            this._watchBinding(binding);
             this._notifyRenderer('feishu:jsonlChanged', {
               jsonlPath: binding.jsonl_path,
               sessionId: binding.session_id
             });
-          }, 500);
-        }
-      });
-      console.log(`[feishu] Watching ${binding.jsonl_path}`);
-    } catch (err) {
-      console.error('[feishu] Failed to watch file:', err.message);
+          }
+        });
+        console.log(`[feishu] Watching directory for ${fileName} to appear`);
+      } catch (err) {
+        console.error('[feishu] Failed to watch directory:', err.message);
+      }
     }
   }
 

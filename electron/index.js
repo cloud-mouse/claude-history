@@ -117,9 +117,17 @@ app.on('window-all-closed', () => {
   app.quit();
 });
 
-app.on('before-quit', async () => {
+let isQuitting = false;
+app.on('before-quit', (e) => {
+  if (isQuitting) return;
   if (feishuBridge) {
-    await feishuBridge.stop();
+    e.preventDefault();
+    isQuitting = true;
+    feishuBridge.stop().then(() => {
+      app.quit();
+    }).catch(() => {
+      app.quit();
+    });
   }
 });
 
