@@ -208,9 +208,14 @@ onMounted(() => {
   );
   _unsubs.push(
     window.electronAPI.onFeishuJsonlChanged((data) => {
-      // Reload current conversation if it matches
+      // Force-reload current conversation if it matches
       if (conversationsStore.activeConversation?.filePath === data.jsonlPath) {
-        conversationsStore.openConversation(conversationsStore.activeConversation);
+        conversationsStore.reloadByFilePath(data.jsonlPath);
+      }
+      // Refresh conversation list so updated timestamps show up
+      const selectedProject = projectsStore.selectedProject;
+      if (selectedProject) {
+        projectsStore.refreshConversations(selectedProject.id);
       }
     })
   );

@@ -14,13 +14,14 @@ export const useConversationsStore = defineStore('conversations', () => {
     activeConversation.value?.messages?.find(m => m.id === selectedConvId.value) || null
   );
 
-  async function openConversation(conv) {
-    if (activeConversation.value?.filePath === conv.filePath) return;
+  async function openConversation(conv, forceReload = false) {
+    if (!forceReload && activeConversation.value?.filePath === conv.filePath) return;
     loading.value = true;
     try {
       let conversation;
 
-      if (cache.has(conv.filePath)) {
+      // Use cache unless force-reloading (e.g. Feishu JSONL changed)
+      if (!forceReload && cache.has(conv.filePath)) {
         conversation = cache.get(conv.filePath);
       } else {
         const result = await window.electronAPI.loadConversation(conv.filePath);
@@ -71,5 +72,24 @@ export const useConversationsStore = defineStore('conversations', () => {
 
   function clearCache() { cache.clear(); }
 
-  return { selectedConvId, activeConversation, loading, skippedMessages, selectedConv, titleMap, openConversation, clearActive, clearCache };
+  /**
+   * Force-reload a conversation from disk by filePath.
+   * Used when Feishu updates the JSONL file externally.
+   * If the file is the active conversation, re-reads and updates in place.
+   */
+  async function reloadByFilePath(filePath) {
+    const conv = activeConversation.value?.filePath === filePath
+      ? activeConversation.value
+      : null;
+    if (!conv) return;
+
+    // Clear both backend and frontend caches before re-reading
+    await window.electronAPI.invalidateConversationCache(filePath);
+    cache.delete(filePath);
+
+    // Bypass cache + bypass early-return
+    await openConversation(conv, true);
+  }
+
+  return { selectedConvId, activeConversation, loading, skippedMessages, selectedConv, titleMap, openConversation, clearActive, clearCache, reloadByFilePath };
 });

@@ -127,6 +127,13 @@ function registerIpcHandlers() {
     return { success: true };
   });
 
+  // invalidate-conversation-cache — Clear cache for a specific file
+  ipcMain.handle('invalidate-conversation-cache', async (_, filePath) => {
+    conversationCache.delete(filePath);
+    pendingRequests.delete(filePath);
+    return { success: true };
+  });
+
   // 2. get-conversations — Get conversations for a project from SQLite
   ipcMain.handle('get-conversations', async (_, projectId) => {
     try {

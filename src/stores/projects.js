@@ -41,5 +41,23 @@ export const useProjectsStore = defineStore('projects', () => {
     selectedProjectId.value = null;
   }
 
-  return { projects, selectedProjectId, selectedProject, loading, error, loadProjects, selectProject, clearSelectedProject };
+  /**
+   * Refresh the conversation list for a given project.
+   * Used when Feishu updates a JSONL file externally.
+   */
+  async function refreshConversations(projectId) {
+    try {
+      const result = await window.electronAPI.getConversations(projectId);
+      if (result.success && result.conversations) {
+        const proj = projects.value.find(p => p.id === projectId);
+        if (proj) {
+          proj.conversations = result.conversations;
+        }
+      }
+    } catch {
+      // Ignore — best-effort refresh
+    }
+  }
+
+  return { projects, selectedProjectId, selectedProject, loading, error, loadProjects, selectProject, clearSelectedProject, refreshConversations };
 });

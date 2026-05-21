@@ -3,9 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { execSync } = require('child_process');
+const { execSync, execFile } = require('child_process');
 const crypto = require('crypto');
-const { spawn } = require('child_process');
 const { createLarkChannel, Client } = require('@larksuiteoapi/node-sdk');
 
 const CC_DIR = () => path.join(os.homedir(), '.cc-connect');
@@ -326,8 +325,12 @@ class FeishuBridge {
       const response = await this._spawnClaude(
         binding.session_id,
         binding.jsonl_path,
-        messageText
+        messageText,
+        chatId
       );
+
+      // Update DB so conversation list shows fresh timestamp
+      this._touchConversation(binding.jsonl_path);
 
       // Phase 3a: Send formatted card response
       await this._sendCard(chatId, this._buildResponseCard(response));
@@ -464,17 +467,13 @@ class FeishuBridge {
   }
 
   /**
-   * Kill the running Claude process and its entire process group.
-   * Uses process.kill(-pid) to ensure child processes (shell commands, tools)
-   * spawned by Claude CLI are also terminated.
+   * Kill the running Claude process.
    */
   _killClaudeProcess(signal = 'SIGTERM') {
     if (!this._claudeProcess) return;
     try {
-      process.kill(-this._claudeProcess.pid, signal);
+      this._claudeProcess.kill(signal);
     } catch {
-      // Process may have already exited; fall back to child.kill()
-      try { this._claudeProcess.kill(signal); } catch {}
     }
     this._claudeProcess = null;
   }
@@ -873,7 +872,8 @@ class FeishuBridge {
       const response = await this._spawnClaude(
         currentBinding.session_id,
         currentBinding.jsonl_path,
-        this._lastMessage
+        this._lastMessage,
+        chatId
       );
 
       await this._sendCard(chatId, this._buildResponseCard(response));
@@ -923,7 +923,8 @@ class FeishuBridge {
       const response = await this._spawnClaude(
         currentBinding.session_id,
         currentBinding.jsonl_path,
-        prompt
+        prompt,
+        chatId
       );
 
       await this._sendCard(chatId, this._buildResponseCard(response));
@@ -1018,7 +1019,7 @@ class FeishuBridge {
    * - In group chats: all group members (add bot to groups with caution)
    * Do NOT expose the bot to untrusted users.
    */
-  _spawnClaude(sessionId, jsonlPath, message) {
+  _spawnClaude(sessionId, jsonlPath, message, chatId) {
     return new Promise((resolve, reject) => {
       const args = [
         '-p', message,
@@ -1059,13 +1060,14 @@ class FeishuBridge {
 
       const child = spawn(claudeBin, args, {
         cwd: cwd || undefined,
-        detached: true,
         env: {
           ...process.env,
           PATH: resolveShellPath(),
         },
         stdio: ['pipe', 'pipe', 'pipe']
       });
+
+      console.log(`[feishu] Child PID: ${child.pid}, detached: true`);
 
       this._claudeProcess = child;
 
@@ -1132,22 +1134,30 @@ class FeishuBridge {
         }
       };
 
-      child.stdout.on('data', onStdout);
-      child.stderr.on('data', (d) => { stderr += d.toString(); });
+      child.stdout.on('data', (d) => {
+        console.log(`[feishu] stdout (${d.length} bytes): ${d.toString().slice(0, 200)}`);
+        onStdout(d);
+      });
+      child.stderr.on('data', (d) => {
+        const text = d.toString();
+        stderr += text;
+        console.log(`[feishu] stderr: ${text.slice(0, 200)}`);
+      });
 
       // 5 minute timeout with SIGKILL escalation
       const timer = setTimeout(() => {
         // Kill the entire process group
-        try { process.kill(-child.pid, 'SIGTERM'); } catch { try { child.kill('SIGTERM'); } catch {} }
+        try { child.kill('SIGTERM'); } catch {}
         // If SIGTERM doesn't work after 10s, force kill
         const killTimer = setTimeout(() => {
-          try { process.kill(-child.pid, 'SIGKILL'); } catch { try { child.kill('SIGKILL'); } catch {} }
+          try { child.kill('SIGKILL'); } catch {}
         }, 10000);
         killTimer.unref();
         reject(new Error('Claude Code 超时（5分钟）'));
       }, 300000);
 
       child.on('close', (code) => {
+        console.log(`[feishu] Child exited with code ${code}, stdout len=${stdout.length}, stderr len=${stderr.length}`);
         clearTimeout(timer);
         this._claudeProcess = null;
 
@@ -1168,6 +1178,7 @@ class FeishuBridge {
       });
 
       child.on('error', (err) => {
+        console.error(`[feishu] Child error: ${err.message}`);
         clearTimeout(timer);
         this._claudeProcess = null;
         reject(new Error(`无法启动 Claude Code: ${err.message}`));
@@ -1457,6 +1468,24 @@ class FeishuBridge {
     if (this._watcher) {
       this._watcher.close();
       this._watcher = null;
+    }
+  }
+
+  /**
+   * Update the conversation's updated_at in the database so the
+   * conversation list reflects the latest activity from Feishu.
+   */
+  _touchConversation(jsonlPath) {
+    try {
+      const fs = require('fs');
+      const stat = fs.statSync(jsonlPath);
+      const conv = this.store.getConversationByFilePath(jsonlPath);
+      if (conv) {
+        this.store.upsertConversation(conv.project_id, jsonlPath, stat.size, Date.now());
+      }
+    } catch (err) {
+      // Best-effort — file may not exist yet for new sessions
+      console.warn('[feishu] _touchConversation failed:', err.message);
     }
   }
 

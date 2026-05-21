@@ -7,7 +7,16 @@ class Store {
   constructor(dbPath) {
     this.db = new Database(dbPath);
     this.db.pragma('journal_mode = WAL');
+    this._safeStorage = null;
     this._init();
+  }
+
+  /**
+   * Set Electron safeStorage for encrypting sensitive values.
+   * Must be called after app.whenReady().
+   */
+  setSafeStorage(safeStorage) {
+    this._safeStorage = safeStorage;
   }
 
   _init() {
@@ -178,12 +187,29 @@ class Store {
 
   getFeishuConfig() {
     const row = this.db.prepare('SELECT * FROM feishu_config WHERE id = 1').get();
-    return row || { app_id: '', app_secret: '', enabled: 0 };
+    if (!row) return { app_id: '', app_secret: '', enabled: 0 };
+    // Decrypt app_secret if encrypted
+    if (row.app_secret && row.app_secret.startsWith('ENC:') && this._safeStorage) {
+      try {
+        const buf = Buffer.from(row.app_secret.slice(4), 'base64');
+        row.app_secret = this._safeStorage.decryptBuffer(buf).toString('utf-8');
+      } catch {
+        // Decryption failed (different machine/keychain?) — treat as empty
+        row.app_secret = '';
+      }
+    }
+    return row;
   }
 
   saveFeishuConfig(appId, appSecret) {
     const now = Date.now();
     if (appSecret != null && appSecret !== '') {
+      // Encrypt the secret if safeStorage is available
+      let storedSecret = appSecret;
+      if (this._safeStorage) {
+        const encrypted = this._safeStorage.encryptString(appSecret);
+        storedSecret = 'ENC:' + encrypted.toString('base64');
+      }
       // Full save: both appId and appSecret provided
       this.db.prepare(`
         INSERT INTO feishu_config (id, app_id, app_secret, enabled, updated_at)
@@ -193,7 +219,7 @@ class Store {
           app_secret = excluded.app_secret,
           enabled = 1,
           updated_at = excluded.updated_at
-      `).run(appId, appSecret, now);
+      `).run(appId, storedSecret, now);
     } else {
       // Partial save: only update appId, preserve existing app_secret
       this.db.prepare(`
