@@ -1084,7 +1084,7 @@ class FeishuBridge {
   _extractCardText(card) {
     const parts = [];
     if (card.header?.title?.content) parts.push(card.header.title.content);
-    for (const el of (card.elements || [])) {
+    for (const el of (card.body?.elements || card.elements || [])) {
       if (el.tag === 'markdown' && el.content) parts.push(el.content);
       if (el.tag === 'div' && el.text?.content) parts.push(el.text.content);
     }
@@ -1109,23 +1109,25 @@ class FeishuBridge {
 
     return {
       schema: '2.0',
-      config: { wide_screen_mode: true },
+      config: { width_mode: 'fill' },
       header: {
         title: { tag: 'plain_text', content: '✅ Claude Code' },
         template: 'turquoise'
       },
-      elements: [
-        { tag: 'markdown', content },
-        {
-          tag: 'hr'
-        },
-        {
-          tag: 'note',
-          elements: [
-            { tag: 'plain_text', content: '由 Claude Code 飞书桥接驱动' }
-          ]
-        }
-      ]
+      body: {
+        elements: [
+          { tag: 'markdown', content },
+          {
+            tag: 'hr'
+          },
+          {
+            tag: 'note',
+            elements: [
+              { tag: 'plain_text', content: '由 Claude Code 飞书桥接驱动' }
+            ]
+          }
+        ]
+      }
     };
   }
 
@@ -1135,14 +1137,16 @@ class FeishuBridge {
   _buildAckCard(preview) {
     return {
       schema: '2.0',
-      config: { wide_screen_mode: true },
+      config: { width_mode: 'fill' },
       header: {
         title: { tag: 'plain_text', content: '⏳ 正在处理' },
         template: 'blue'
       },
-      elements: [
-        { tag: 'markdown', content: `> ${preview}` }
-      ]
+      body: {
+        elements: [
+          { tag: 'markdown', content: `> ${preview}` }
+        ]
+      }
     };
   }
 
@@ -1152,14 +1156,16 @@ class FeishuBridge {
   _buildErrorCard(message) {
     return {
       schema: '2.0',
-      config: { wide_screen_mode: true },
+      config: { width_mode: 'fill' },
       header: {
         title: { tag: 'plain_text', content: '❌ 处理失败' },
         template: 'red'
       },
-      elements: [
-        { tag: 'markdown', content: `\`\`\`\n${message}\n\`\`\`` }
-      ]
+      body: {
+        elements: [
+          { tag: 'markdown', content: `\`\`\`\n${message}\n\`\`\`` }
+        ]
+      }
     };
   }
 
@@ -1169,14 +1175,16 @@ class FeishuBridge {
   _buildInfoCard(title, markdownContent, color = 'blue') {
     return {
       schema: '2.0',
-      config: { wide_screen_mode: true },
+      config: { width_mode: 'fill' },
       header: {
         title: { tag: 'plain_text', content: title },
         template: color
       },
-      elements: [
-        { tag: 'markdown', content: markdownContent }
-      ]
+      body: {
+        elements: [
+          { tag: 'markdown', content: markdownContent }
+        ]
+      }
     };
   }
 
@@ -1186,14 +1194,16 @@ class FeishuBridge {
   _buildSuccessCard(title, markdownContent) {
     return {
       schema: '2.0',
-      config: { wide_screen_mode: true },
+      config: { width_mode: 'fill' },
       header: {
         title: { tag: 'plain_text', content: title },
         template: 'green'
       },
-      elements: [
-        { tag: 'markdown', content: markdownContent }
-      ]
+      body: {
+        elements: [
+          { tag: 'markdown', content: markdownContent }
+        ]
+      }
     };
   }
 
@@ -1203,14 +1213,16 @@ class FeishuBridge {
   _buildWarningCard(title, markdownContent) {
     return {
       schema: '2.0',
-      config: { wide_screen_mode: true },
+      config: { width_mode: 'fill' },
       header: {
         title: { tag: 'plain_text', content: title },
         template: 'orange'
       },
-      elements: [
-        { tag: 'markdown', content: markdownContent }
-      ]
+      body: {
+        elements: [
+          { tag: 'markdown', content: markdownContent }
+        ]
+      }
     };
   }
 
