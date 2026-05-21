@@ -153,6 +153,13 @@ class FeishuBridge {
         await this._handleMessage(msg);
       } catch (err) {
         console.error('[feishu] Error handling message:', err.message);
+        // Try to notify the user instead of silently failing
+        try {
+          const chatId = msg.chatId;
+          if (chatId) {
+            await this._sendCard(chatId, this._buildErrorCard(`内部错误: ${err.message}`));
+          }
+        } catch (_) { /* give up */ }
       }
     });
 
@@ -200,6 +207,7 @@ class FeishuBridge {
       this._claudeProcess.kill('SIGTERM');
       this._claudeProcess = null;
     }
+    this._processing = false;
     if (this.channel) {
       try {
         await this.channel.disconnect();
@@ -223,9 +231,14 @@ class FeishuBridge {
    * Feishu message will associate the chat automatically.
    */
   async bindSession(jsonlPath, projectDir) {
-    if (!jsonlPath || !projectDir) {
-      return { success: false, error: '缺少会话路径或项目目录' };
+    if (!jsonlPath) {
+      return { success: false, error: '缺少会话路径' };
     }
+
+    // Derive the REAL project directory from the JSONL path.
+    // projectDir from the DB is the slug directory under ~/.claude/projects/,
+    // NOT the actual working directory. _resolveCwd decodes the slug correctly.
+    const realProjectDir = this._resolveCwd(jsonlPath) || projectDir || process.cwd();
 
     const sessionId = path.basename(jsonlPath, '.jsonl');
 
@@ -235,7 +248,7 @@ class FeishuBridge {
     // Create binding with placeholder chatId (will be filled on first message)
     // Use a special prefix to indicate "waiting for first message"
     const chatId = `_pending_${sessionId.slice(0, 8)}`;
-    this.store.createBinding(chatId, 'p2p', jsonlPath, sessionId, projectDir);
+    this.store.createBinding(chatId, 'p2p', jsonlPath, sessionId, realProjectDir);
 
     // Watch the JSONL file
     this._watchBinding({ jsonl_path: jsonlPath, session_id: sessionId });
@@ -359,11 +372,20 @@ class FeishuBridge {
   _extractText(msg) {
     // msg.content is already normalized by createLarkChannel
     // It could be a string (markdown) or have a text property
+    let text;
     if (typeof msg.content === 'string') {
-      return msg.content;
+      text = msg.content;
+    } else if (msg.text) {
+      text = msg.text;
+    } else {
+      text = String(msg.content || '');
     }
-    if (msg.text) return msg.text;
-    return String(msg.content || '');
+
+    // Strip @mention prefix (e.g. "@皓月当空 /new" → "/new")
+    // Feishu groups prepend @BotName when users mention the bot
+    text = text.replace(/^@\S+\s*/, '');
+
+    return text.trim();
   }
 
   // ── Slash Command System ────────────────────────────────────────
@@ -472,7 +494,7 @@ class FeishuBridge {
     ];
 
     if (binding) {
-      const cwd = binding.project_dir || '(未知)';
+      const cwd = this._resolveCwd(binding.jsonl_path) || binding.project_dir || '(未知)';
       const shortSession = binding.session_id.slice(0, 8);
       lines.push('');
       lines.push('**当前绑定**');
@@ -496,10 +518,11 @@ class FeishuBridge {
       return;
     }
 
+    const displayCwd = this._resolveCwd(binding.jsonl_path) || binding.project_dir;
     const content = [
       `Chat ID: \`${binding.chat_id}\``,
       `会话 ID: \`${binding.session_id.slice(0, 16)}...\``,
-      `项目目录: \`${binding.project_dir}\``,
+      `项目目录: \`${displayCwd}\``,
       `JSONL: \`${path.basename(binding.jsonl_path)}\``,
       `模型: \`${this._model || '默认'}\``,
     ].join('\n');
@@ -532,7 +555,9 @@ class FeishuBridge {
     // The new JSONL doesn't exist yet, so next _spawnClaude call
     // will skip --resume and start a new conversation.
     const newSessionId = crypto.randomUUID();
-    const slug = binding.project_dir.replace(/\//g, '-').replace(/_/g, '-');
+    // Resolve real cwd from the existing JSONL path (project_dir may be wrong)
+    const realCwd = this._resolveCwd(binding.jsonl_path) || binding.project_dir;
+    const slug = realCwd.replace(/\//g, '-').replace(/_/g, '-');
     const newJsonlPath = path.join(
       os.homedir(), '.claude', 'projects', slug, `${newSessionId}.jsonl`
     );
@@ -549,7 +574,7 @@ class FeishuBridge {
       '✅ 已开启新会话',
       [
         `会话 ID: \`${newSessionId.slice(0, 8)}...\``,
-        `项目: \`${binding.project_dir}\``,
+        `项目: \`${realCwd}\``,
         '',
         '💡 发送消息即可开始新对话'
       ].join('\n')
@@ -563,14 +588,16 @@ class FeishuBridge {
     }
 
     if (!args) {
-      await this._sendCard(chatId, this._buildInfoCard('📂 当前目录', `\`${binding.project_dir}\``, 'indigo'));
+      const realCwd = this._resolveCwd(binding.jsonl_path) || binding.project_dir;
+      await this._sendCard(chatId, this._buildInfoCard('📂 当前目录', `\`${realCwd}\``, 'indigo'));
       return;
     }
 
     // Resolve the path (support ~ and relative paths)
+    const baseCwd = this._resolveCwd(binding.jsonl_path) || binding.project_dir;
     let targetPath = args.replace(/^~/, os.homedir());
     if (!path.isAbsolute(targetPath)) {
-      targetPath = path.resolve(binding.project_dir, targetPath);
+      targetPath = path.resolve(baseCwd, targetPath);
     }
 
     // Validate
@@ -677,7 +704,8 @@ class FeishuBridge {
       return;
     }
 
-    const slug = binding.project_dir.replace(/\//g, '-').replace(/_/g, '-');
+    const realCwd = this._resolveCwd(binding.jsonl_path) || binding.project_dir;
+    const slug = realCwd.replace(/\//g, '-').replace(/_/g, '-');
     const projectDir = path.join(os.homedir(), '.claude', 'projects', slug);
 
     if (!fs.existsSync(projectDir)) {
@@ -739,7 +767,8 @@ class FeishuBridge {
       return;
     }
 
-    const slug = binding.project_dir.replace(/\//g, '-').replace(/_/g, '-');
+    const realCwd = this._resolveCwd(binding.jsonl_path) || binding.project_dir;
+    const slug = realCwd.replace(/\//g, '-').replace(/_/g, '-');
     const projectDir = path.join(os.homedir(), '.claude', 'projects', slug);
 
     if (!fs.existsSync(projectDir)) {
@@ -1261,24 +1290,6 @@ class FeishuBridge {
         ]
       }
     };
-  }
-
-  /**
-   * Format Claude Code's response for Feishu display.
-   * Truncates long responses, preserves code blocks, adds completion indicator.
-   */
-  _formatResponse(response) {
-    const MAX_LENGTH = 3800;
-    let text = String(response || '(空响应)').trim();
-
-    // If response is short enough, wrap with completion indicator
-    if (text.length <= MAX_LENGTH - 20) {
-      return `✅ 处理完成\n\n${text}`;
-    }
-
-    // Truncate long responses, trying to break at line boundaries
-    const truncated = this._smartTruncate(text, MAX_LENGTH - 60);
-    return `✅ 处理完成\n\n${truncated}\n\n_...（内容过长已截断）_`;
   }
 
   /**

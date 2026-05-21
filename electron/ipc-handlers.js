@@ -91,6 +91,8 @@ function registerIpcHandlers() {
         const noTitleConvs = dbConvs.filter(c => !c.title);
         if (noTitleConvs.length > 0) {
           for (const conv of noTitleConvs) {
+            // Skip files that no longer exist on disk
+            if (!fs.existsSync(conv.file_path)) continue;
             try {
               const title = await extractTitleFromJsonl(conv.file_path);
               if (title && title !== 'Conversation ' + new Date().toISOString().slice(0, 10)) {

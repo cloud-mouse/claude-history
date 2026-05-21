@@ -45,6 +45,12 @@ function createWindow() {
 function createMenu() {
   const template = [
     {
+      label: app.name,
+      submenu: [
+        { label: '退出 ' + app.name, accelerator: 'CmdOrCtrl+Q', role: 'quit' }
+      ]
+    },
+    {
       label: '视图',
       submenu: [
         {
@@ -61,21 +67,21 @@ function createMenu() {
           }
         },
         { type: 'separator' },
-        { role: 'reload' },
-        { role: 'forceReload' },
-        { role: 'toggleDevTools' },
+        { label: '重新加载', role: 'reload' },
+        { label: '强制重新加载', role: 'forceReload' },
+        { label: '切换开发者工具', role: 'toggleDevTools' },
         { type: 'separator' },
-        { role: 'undo' },
-        { role: 'redo' },
+        { label: '撤销', role: 'undo' },
+        { label: '重做', role: 'redo' },
         { type: 'separator' },
-        { role: 'cut' },
-        { role: 'copy' },
-        { role: 'paste' },
-        { role: 'selectAll' },
+        { label: '剪切', role: 'cut' },
+        { label: '复制', role: 'copy' },
+        { label: '粘贴', role: 'paste' },
+        { label: '全选', role: 'selectAll' },
         { type: 'separator' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
-        { role: 'resetZoom' }
+        { label: '放大', role: 'zoomIn' },
+        { label: '缩小', role: 'zoomOut' },
+        { label: '重置缩放', role: 'resetZoom' }
       ]
     }
   ];
