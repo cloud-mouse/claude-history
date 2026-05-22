@@ -85,7 +85,12 @@ class FeishuBridge {
       'card.action.trigger': async (data) => {
         try { await this._handleCardAction(data); } catch (err) { console.error('[feishu][cardAction] ERROR:', err.message); }
         return { toast: { type: 'success', content: '已处理' } };
-      }
+      },
+      // No-op handlers to suppress "no handle" warnings for common events
+      'im.message.reaction.created_v1': async () => {},
+      'im.message.reaction.deleted_v1': async () => {},
+      'im.chat.member.bot.added_v1': async () => {},
+      'drive.notice.comment_add_v1': async () => {},
     });
 
     this.wsClient = new WSClient({
