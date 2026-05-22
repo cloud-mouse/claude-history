@@ -267,6 +267,8 @@ xcode-select --install
 
 更多飞书相关问题请参考[飞书桥连文档](docs/feishu-bridge.md)。
 
+完整的应用使用说明请参考[操作指南](docs/operations.md)。
+
 ## License
 
 MIT
