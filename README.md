@@ -12,7 +12,7 @@
 - **智能标题提取**：自动从对话内容中提取并生成标题
 - **对话搜索**：在对话列表中按关键词快速过滤
 - **项目排序**：支持按时间或对话数量排序
-- **飞书桥连**：通过飞书机器人远程与 Claude Code 对话，支持 17+ 条斜杠命令、会话绑定、模型切换、工作目录切换等
+- **飞书桥连**：通过飞书机器人远程与 Claude Code 对话，支持 20+ 条斜杠命令、会话绑定、模型切换、权限管控、工作目录切换等
 - **中文界面**：完整的本地化支持
 - **安全删除**：支持删除对话和项目（同时移除磁盘文件和数据库记录）
 - **跨平台构建**：支持 macOS（DMG）、Windows（NSIS 安装包 + 便携版）、Linux（AppImage），通过 GitHub Releases 自动发布
@@ -116,9 +116,18 @@ claude-history/
 │   ├── index.js                 # 主进程入口，创建窗口
 │   ├── preload.js               # 预加载脚本，暴露 IPC 接口
 │   ├── ipc-handlers.js          # 核心业务 IPC 通信处理器
-│   ├── feishu-bridge.js         # 飞书桥连核心（WebSocket 连接、消息处理、命令系统）
 │   ├── feishu-ipc.js            # 飞书桥连 IPC 处理器
-│   ├── store.js                 # SQLite 数据库操作（含飞书配置表）
+│   ├── feishu-hook-script.js    # Claude Code PreToolUse hook 脚本
+│   ├── feishu/                  # 飞书桥连模块
+│   │   ├── index.js               # 模块入口
+│   │   ├── bridge.js              # 核心桥连（WebSocket、消息处理）
+│   │   ├── commands.js            # 20+ 条斜杠命令
+│   │   ├── cards.js               # 飞书卡片构建
+│   │   ├── permissions.js         # 权限管理（4 种模式）
+│   │   ├── hooks-handler.js       # Hooks HTTP 服务器
+│   │   ├── claude-spawn.js        # Claude CLI 调用
+│   │   └── binding.js             # 会话绑定与文件监听
+│   ├── store.js                 # SQLite 数据库操作（含飞书配置表、凭证加密）
 │   ├── file-scanner.js          # 扫描 ~/.claude/projects 目录
 │   ├── jsonl-parser.js          # 流式 JSONL 解析器
 │   ├── message-parser.js        # 消息解析与结构化
@@ -199,12 +208,14 @@ claude-history/
 
 ### 主要功能
 
-- **双向消息流**：飞书消息 → Claude Code CLI → 飞书卡片回复
+- **双向消息流**：飞书消息 → Claude Code CLI → 飞书卡片回复，处理中显示敲键盘表情
 - **会话绑定**：将飞书聊天绑定到指定的 Claude Code 会话
-- **17+ 条命令**：`/help`、`/status`、`/new`、`/switch`、`/model`、`/cd` 等，支持中文别名
+- **20+ 条命令**：`/help`、`/status`、`/new`、`/switch`、`/model`、`/cd`、`/permission`、`/allow`、`/disallow` 等，支持中文别名
+- **权限管控**：通过飞书卡片确认敏感操作（Bash、Write、Edit），支持四种权限模式
 - **模型切换**：远程切换 Claude 模型（sonnet / opus / haiku）
 - **工作目录切换**：远程切换工作目录
 - **实时状态**：对话列表中显示飞书会话状态圆点
+- **凭证加密**：App Secret 使用 Electron safeStorage 加密存储
 
 ### 快速配置
 

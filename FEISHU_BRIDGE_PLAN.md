@@ -23,7 +23,9 @@
                            claude-history 刷新可见
 ```
 
-消息处理流程：`收到消息 → 确认卡片 → 生成 Claude 响应 → 结果卡片 → 通知 UI 刷新`
+消息处理流程：`收到消息 → Typing 表情回应 → 生成 Claude 响应 → 移除表情 → 结果卡片 → 通知 UI 刷新`
+
+权限管控流程：`Claude 调用敏感工具 → Hook 拦截 → 飞书确认卡片 → 用户允许/拒绝 → 继续执行`
 
 ## 功能范围
 
@@ -31,17 +33,19 @@
 
 1. **设置弹窗**（`SettingsModal.vue`）：飞书桥连开关 + App ID / App Secret 配置 + 连接状态 + 绑定信息
 2. **WebSocket 连接**（`FeishuBridge`）：通过 Lark SDK 的 `createLarkChannel` 建立长连接，自动重连
-3. **消息处理**：飞书消息 → Claude Code CLI spawn → 飞书卡片回复（三阶段：确认 → 处理 → 回复）
+3. **消息处理**：飞书消息 → Typing 表情回应 → Claude Code CLI spawn → 移除表情 → 飞书卡片回复
 4. **会话绑定**：通过 UI 绑定按钮或飞书命令绑定 Claude Code 会话
 5. **对话列表标记**：有远程会话的对话显示绿色脉动圆点
 6. **消息来源标签**：气泡中标注 "🐦 来自飞书"
-7. **17+ 条斜杠命令**：含中英文别名
+7. **20+ 条斜杠命令**：含中英文别名，新增 /permission、/allow、/disallow、/confirm
 8. **模型切换**：远程切换 Claude 模型（sonnet / opus / haiku）
 9. **工作目录切换**：远程切换工作目录
 10. **历史消息查看**：远程查看最近 N 条消息
 11. **会话管理**：创建新会话、列出会话、切换会话
 12. **JSONL 文件监听**：自动检测新消息并通知 UI 刷新
 13. **自动启动**：应用启动时如果之前已启用，自动重连
+14. **Hooks 权限管控**：通过本地 HTTP 服务器接收 Claude Code hook 回调，飞书卡片确认敏感操作
+15. **凭证加密**：App Secret 使用 Electron safeStorage 加密存储
 
 ### 未实现（明确排除）
 
@@ -52,14 +56,21 @@
 
 ## 文件清单
 
-**新增文件** (5 个)：
+**新增文件** (12 个)：
 
 ```
-electron/feishu-bridge.js              # 飞书桥连核心类（WebSocket、消息处理、命令系统、CLI spawn）
-electron/feishu-ipc.js                 # 飞书 IPC 处理器（8 个通道）
+electron/feishu/index.js               # 飞书模块入口
+electron/feishu/bridge.js              # 核心桥连（WebSocket、消息处理）
+electron/feishu/commands.js            # 20+ 条斜杠命令
+electron/feishu/cards.js               # 飞书卡片构建（schema 2.0）
+electron/feishu/permissions.js         # 权限管理（4 种模式）
+electron/feishu/hooks-handler.js       # Hooks HTTP 服务器（端口 19876+）
+electron/feishu/claude-spawn.js        # Claude CLI 调用
+electron/feishu/binding.js             # 会话绑定与文件监听
+electron/feishu-hook-script.js         # Claude Code PreToolUse hook 脚本
+electron/feishu-ipc.js                 # 飞书 IPC 处理器
 src/stores/feishu.js                   # Pinia Store（连接状态、配置、绑定）
 src/components/feishu/SettingsModal.vue # 设置弹窗 UI
-FEISHU_BRIDGE_PLAN.md                  # 本文档
 ```
 
 **修改文件** (10 个)：
@@ -100,6 +111,10 @@ README.md                  # 更新功能特性、项目结构等
 | `/cd <路径>` | — | 切换工作目录 |
 | `/model [名称]` | — | 查看/设置模型 |
 | `/system <提示>` | — | 发送系统提示 |
+| `/confirm [on|off]` | — | 开启/关闭执行确认 |
+| `/permission [mode]` | `/权限` | 查看/设置权限模式 |
+| `/allow <工具>` | — | 始终允许指定工具 |
+| `/disallow <工具>` | — | 取消始终允许 |
 
 ## 数据库设计
 
@@ -109,10 +124,13 @@ SQLite 数据库（`~/.claude/history-viewer.db`）新增两个表：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| key | TEXT PRIMARY KEY | 配置键名 |
-| value | TEXT | 配置值 |
+| id | INTEGER PRIMARY KEY | 固定为 1（单行配置） |
+| app_id | TEXT | 飞书应用 App ID |
+| app_secret | TEXT | 飞书应用 App Secret（加密存储，前缀 `ENC:`） |
+| enabled | INTEGER | 是否启用 |
+| updated_at | INTEGER | 更新时间 |
 
-存储项：`app_id`、`app_secret`、`enabled`
+> App Secret 使用 Electron safeStorage 加密，密文以 `ENC:` 前缀存储。
 
 ### feishu_bindings
 
@@ -143,10 +161,12 @@ SQLite 数据库（`~/.claude/history-viewer.db`）新增两个表：
 
 ## 关键技术决策
 
-1. **Lark SDK 直连**：使用 `createLarkChannel` 建立 WebSocket，不依赖 cc-connect
-2. **飞书卡片消息**：使用 schema 2.0 交互卡片，提供丰富的消息展示
+1. **Lark SDK 直连**：使用 `WSClient` + `EventDispatcher` 建立 WebSocket，不依赖 cc-connect
+2. **飞书卡片消息**：使用 schema 2.0（按钮直接放在 `column_set` 中，通过 `behaviors` 声明交互）
 3. **Pending binding 模式**：绑定使用 `_pending_` 前缀的 chatId，首条飞书消息到达时自动关联
 4. **SQLite 存储**：配置和绑定信息存储在本地 SQLite 数据库中，不依赖外部配置文件
-5. **安全**：App Secret 仅在主进程中使用，不暴露给渲染进程
+5. **安全**：App Secret 使用 Electron safeStorage 加密存储，仅在主进程中解密使用，不暴露给渲染进程
 6. **优雅降级**：未配置时设置弹窗显示"未配置"状态，不影响核心功能使用
-7. **CLI spawn**：使用 `child_process.spawn` 调用 Claude Code CLI，支持 `--resume` 和 `--model` 参数
+7. **CLI spawn**：使用 `child_process.spawn` 调用 Claude Code CLI，支持 `--resume`、`--model`、`--settings` 参数
+8. **Hooks 权限管控**：本地 HTTP 服务器（端口 19876-19885）接收 PreToolUse hook，飞书卡片确认敏感操作
+9. **模块化架构**：feishu/ 目录下 8 个独立模块，职责单一

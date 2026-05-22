@@ -14,6 +14,38 @@
 
 claude-history 内置了完整的飞书连接能力，使用 Lark SDK 建立 WebSocket 长连接，直接调用本地 Claude Code CLI 处理消息。
 
+### 消息处理流程
+
+1. 用户在飞书发送消息
+2. 机器人回复 **敲键盘表情**（Typing reaction），表示正在处理
+3. Claude Code CLI 处理请求
+4. 处理完成后，移除敲键盘表情，发送结果卡片
+
+如果 Claude 调用了敏感工具（Bash、Write、Edit），会先发送权限确认卡片到飞书，用户点击允许/拒绝后继续执行。
+
+### 权限管控
+
+当 Claude 执行敏感操作时，会暂停并发送确认卡片到飞书。卡片中显示操作详情（命令内容、文件路径、替换内容等），你可以：
+
+- **✅ 允许** — 执行本次操作
+- **❌ 拒绝** — 阻止本次操作
+- **🔓 始终允许** — 本次及后续所有该工具的调用自动通过
+
+确认卡片有 **60 秒超时**，超时后操作会被自动拒绝。
+
+#### 权限模式
+
+通过 `/permission` 命令切换模式：
+
+| 模式 | 说明 |
+|------|------|
+| `default` | 敏感工具（Bash、Write、Edit）需要确认 |
+| `plan` | 读取类工具自动通过，写入类工具需要确认 |
+| `acceptEdits` | 文件编辑自动通过，仅 Bash 需要确认 |
+| `bypass` | 所有操作自动通过，不发送确认卡片 |
+
+也可以用 `/allow <工具名>` 单独放行某个工具，例如 `/allow Bash` 后 Bash 命令将不再需要确认。
+
 ## 前提条件
 
 - 已安装 Claude Code CLI（`claude` 命令可用）
@@ -25,10 +57,13 @@ claude-history 内置了完整的飞书连接能力，使用 Lark SDK 建立 Web
 2. 记录 **App ID** 和 **App Secret**（在「凭证与基础信息」页面）
 3. 在「事件订阅」中启用消息接收事件
 4. 在「权限管理」中开通以下权限：
-   - `im:message:receive_v1` — 接收消息
-   - `im:message:send_v1` — 发送消息
+   - `im:message` — 获取与发送单聊、群组消息
+   - `im:message.reactions:write_only` — 发送、删除消息表情回复
    - `im:resource` — 读取消息中的资源
-5. 发布应用
+5. 在「事件订阅」中注册回调事件：
+   - `im.message.receive_v1` — 接收消息
+   - `card.action.trigger` — 卡片交互回调（用于权限确认按钮）
+6. 发布应用
 
 ## 在 claude-history 中配置
 
@@ -90,6 +125,10 @@ claude-history 内置了丰富的命令系统，支持中英文双语命令：
 | `/cd <路径>` | 切换工作目录（支持 `~` 和相对路径） |
 | `/model [名称]` | 查看或设置 Claude 模型（`sonnet` / `opus` / `haiku`） |
 | `/system <提示>` | 发送系统提示给 Claude |
+| `/confirm [on\|off]` | 开启/关闭执行确认模式 |
+| `/permission [mode]` | 查看或设置权限模式（`default` / `plan` / `acceptEdits` / `bypass`） |
+| `/allow <工具>` | 始终允许指定工具（如 `/allow Bash`） |
+| `/disallow <工具>` | 取消工具的始终允许 |
 
 ### @机器人触发
 
@@ -139,7 +178,7 @@ claude-history 内置了丰富的命令系统，支持中英文双语命令：
 - `feishu_config` 表 — 存储 App ID、启用状态等
 - `feishu_bindings` 表 — 存储会话绑定关系
 
-> **注意**：App Secret 存储在本地数据库中，不会上传到任何服务器。
+> **安全说明**：App Secret 使用 Electron safeStorage 加密存储在本地数据库中，不会上传到任何服务器。
 
 ## 常见问题
 
@@ -177,3 +216,13 @@ claude-history 内置了丰富的命令系统，支持中英文双语命令：
 ### 支持同时绑定多个飞书聊天吗
 
 当前版本支持一个活跃绑定。如需切换，请先解绑再重新绑定。
+
+### 权限确认卡片没有出现
+
+1. 确认权限模式不是 `bypass`（用 `/status` 查看）
+2. 确认飞书应用已开通 `card.action.trigger` 事件回调
+3. 确认 Claude 使用了 `--settings` 参数启用了 hook（正常流程会自动启用）
+
+### 如何跳过权限确认
+
+使用 `/permission bypass` 切换到全自动模式，或用 `/allow Bash` 等命令单独放行特定工具。
