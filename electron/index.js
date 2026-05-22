@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, safeStorage } = require('electron');
 const path = require('path');
 const { registerIpcHandlers } = require('./ipc-handlers');
 const { registerFeishuIpc } = require('./feishu-ipc');
@@ -98,6 +98,10 @@ function getStore() {
 app.whenReady().then(() => {
   createWindow();
   createMenu();
+
+  // Inject safeStorage for credential encryption
+  const store = getStore();
+  store.setSafeStorage(safeStorage);
 
   // Auto-start Feishu bridge if credentials are configured
   try {

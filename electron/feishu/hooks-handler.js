@@ -2,7 +2,7 @@
 
 const http = require('http');
 const crypto = require('crypto');
-const { buildPermissionCard, buildConfirmResultCard } = require('./cards');
+const { buildPermissionCard, buildConfirmResultCard, buildToolDetail } = require('./cards');
 
 const BASE_PORT = 19876;
 const MAX_PORT_ATTEMPTS = 10;
@@ -137,13 +137,14 @@ class HooksHandler {
     // Wait for user response (max 60s — timeout handled in permissions)
     const result = await pendingPromise;
 
-    // Update Feishu card
+    // Update Feishu card — preserve tool detail for chat history
     if (cardMessageId) {
+      const detail = buildToolDetail(tool_name, tool_input || {}, cwd || '');
       const updateCard = result.decision === 'allow'
-        ? buildConfirmResultCard('✅ 已允许', 'green')
+        ? buildConfirmResultCard('✅ 已允许', 'green', detail)
         : result.reason === 'timeout'
-          ? buildConfirmResultCard('⏰ 已超时 (60s)', 'grey')
-          : buildConfirmResultCard('❌ 已拒绝', 'red');
+          ? buildConfirmResultCard('⏰ 已超时 (60s)', 'grey', detail)
+          : buildConfirmResultCard('❌ 已拒绝', 'red', detail);
       await this._updateCard(cardMessageId, updateCard).catch(() => {});
     }
 
@@ -162,7 +163,11 @@ class HooksHandler {
   _readBody(req) {
     return new Promise((resolve, reject) => {
       let data = '';
-      req.on('data', (chunk) => { data += chunk; });
+      const MAX_BODY = 1024 * 1024; // 1MB
+      req.on('data', (chunk) => {
+        data += chunk;
+        if (data.length > MAX_BODY) { req.destroy(); reject(new Error('Body too large')); }
+      });
       req.on('end', () => resolve(data));
       req.on('error', reject);
     });

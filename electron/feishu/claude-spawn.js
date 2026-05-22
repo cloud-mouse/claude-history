@@ -43,13 +43,13 @@ function resolveClaudeBinary() {
   return 'claude';
 }
 
-function generateHookSettings() {
+function generateHookSettings(hookPort) {
   const hookScriptPath = path.join(__dirname, '..', 'feishu-hook-script.js');
   const settings = {
     hooks: {
       PreToolUse: [{
         matcher: 'Bash|Write|Edit|MultiEdit',
-        hooks: [{ type: 'command', command: `node ${hookScriptPath}`, timeout: 60 }]
+        hooks: [{ type: 'command', command: `FEISHU_HOOK_PORT=${hookPort} node ${hookScriptPath}`, timeout: 60 }]
       }]
     }
   };
@@ -69,7 +69,7 @@ function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, onToolUse
 
     let settingsPath = null;
     if (hookPort) {
-      settingsPath = generateHookSettings();
+      settingsPath = generateHookSettings(hookPort);
       args.push('--settings', settingsPath);
     }
 

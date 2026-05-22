@@ -5,6 +5,7 @@ const http = require('http');
 
 const BRIDGE_HOST = '127.0.0.1';
 const BASE_PORT = 19876;
+const PORT = parseInt(process.env.FEISHU_HOOK_PORT, 10) || BASE_PORT;
 const HTTP_TIMEOUT = 55_000;
 
 function readStdin() {
@@ -68,7 +69,7 @@ async function main() {
     return;
   }
 
-  const response = await sendHookRequest(BASE_PORT, hookData);
+  const response = await sendHookRequest(PORT, hookData);
   process.stdout.write(JSON.stringify(response) + '\n');
 }
 

@@ -128,8 +128,15 @@ function buildWarningCard(title, markdownContent) {
 
 /**
  * Build a confirmation result card (used to replace interactive cards).
+ * @param {string} title - Result title (e.g. "✅ 已允许")
+ * @param {string} color - Header color
+ * @param {string} [detail] - Original operation detail to preserve in history
  */
-function buildConfirmResultCard(title, color) {
+function buildConfirmResultCard(title, color, detail) {
+  const elements = [];
+  if (detail) {
+    elements.push({ tag: 'markdown', content: detail });
+  }
   return {
     schema: '2.0',
     config: { width_mode: 'fill' },
@@ -137,15 +144,14 @@ function buildConfirmResultCard(title, color) {
       title: { tag: 'plain_text', content: title },
       template: color
     },
-    body: { elements: [] }
+    body: { elements }
   };
 }
 
 /**
- * Build a permission confirmation card for a tool call.
- * This is the NEW card for the hooks-based interaction.
+ * Build a markdown detail string for a tool call (reused by permission card and result card).
  */
-function buildPermissionCard(requestId, toolName, toolInput, cwd) {
+function buildToolDetail(toolName, toolInput, cwd) {
   let detail = '';
   if (toolName === 'Bash' && toolInput?.command) {
     const cmd = toolInput.command.length > 300 ? toolInput.command.slice(0, 300) + '...' : toolInput.command;
@@ -160,8 +166,16 @@ function buildPermissionCard(requestId, toolName, toolInput, cwd) {
   } else {
     detail = `\`${toolName}\``;
   }
-
   const projectLine = cwd ? `\n**项目:** \`${cwd}\`` : '';
+  return `**工具:** \`${toolName}\`${projectLine}\n\n${detail}`;
+}
+
+/**
+ * Build a permission confirmation card for a tool call.
+ * This is the NEW card for the hooks-based interaction.
+ */
+function buildPermissionCard(requestId, toolName, toolInput, cwd) {
+  const detail = buildToolDetail(toolName, toolInput, cwd);
 
   return {
     schema: '2.0',
@@ -172,27 +186,37 @@ function buildPermissionCard(requestId, toolName, toolInput, cwd) {
     },
     body: {
       elements: [
-        { tag: 'markdown', content: `**工具:** \`${toolName}\`${projectLine}\n\n${detail}` },
+        { tag: 'markdown', content: detail },
         {
-          tag: 'action',
-          actions: [
+          tag: 'column_set',
+          flex_mode: 'flow',
+          columns: [
             {
-              tag: 'button',
-              text: { tag: 'plain_text', content: '✅ 允许' },
-              type: 'primary',
-              value: { requestId, action: 'hook_allow' }
+              tag: 'column', width: 'auto', weight: 1, vertical_align: 'top',
+              elements: [{
+                tag: 'button',
+                text: { tag: 'plain_text', content: '✅ 允许' },
+                type: 'primary',
+                behaviors: [{ type: 'callback', value: { requestId, action: 'hook_allow' } }]
+              }]
             },
             {
-              tag: 'button',
-              text: { tag: 'plain_text', content: '❌ 拒绝' },
-              type: 'danger',
-              value: { requestId, action: 'hook_deny' }
+              tag: 'column', width: 'auto', weight: 1, vertical_align: 'top',
+              elements: [{
+                tag: 'button',
+                text: { tag: 'plain_text', content: '❌ 拒绝' },
+                type: 'danger',
+                behaviors: [{ type: 'callback', value: { requestId, action: 'hook_deny' } }]
+              }]
             },
             {
-              tag: 'button',
-              text: { tag: 'plain_text', content: '🔓 始终允许' },
-              type: 'primary',
-              value: { requestId, action: 'hook_always_allow', toolName }
+              tag: 'column', width: 'auto', weight: 1, vertical_align: 'top',
+              elements: [{
+                tag: 'button',
+                text: { tag: 'plain_text', content: '🔓 始终允许' },
+                type: 'primary',
+                behaviors: [{ type: 'callback', value: { requestId, action: 'hook_always_allow', toolName } }]
+              }]
             }
           ]
         },
@@ -241,6 +265,7 @@ module.exports = {
   buildWarningCard,
   buildConfirmResultCard,
   buildPermissionCard,
+  buildToolDetail,
   extractCardText,
   smartTruncate
 };

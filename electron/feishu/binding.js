@@ -94,8 +94,17 @@ function watchBinding(binding, onChange) {
       watcher = fs.watch(dir, (eventType, changedFile) => {
         if (changedFile === fileName && fs.existsSync(jsonlPath)) {
           cleanup();
-          // Re-watch the file directly — but return our cleanup wrapper
-          // Note: the caller (_unwatch) handles re-watching via _watchBinding
+          // Re-watch the file directly now that it exists
+          try {
+            watcher = fs.watch(jsonlPath, (ev) => {
+              if (ev === 'change') {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => onChange(binding.jsonl_path, binding.session_id), 500);
+              }
+            });
+          } catch (e) {
+            console.error('[feishu] Failed to re-watch file:', e.message);
+          }
           onChange(binding.jsonl_path, binding.session_id);
         }
       });

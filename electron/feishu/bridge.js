@@ -233,8 +233,8 @@ class FeishuBridge {
       if (entry) {
         entry.resolve(value.action === 'approve');
         const card = value.action === 'approve'
-          ? buildConfirmResultCard('✅ 已批准，正在处理...', 'green')
-          : buildConfirmResultCard('❌ 已拒绝', 'red');
+          ? buildConfirmResultCard('✅ 已批准，正在处理...', 'green', entry.detail)
+          : buildConfirmResultCard('❌ 已拒绝', 'red', entry.detail);
         this._updateCard(messageId, card).catch(() => {});
       }
       return;
@@ -258,16 +258,17 @@ class FeishuBridge {
   _requestConfirmation(chatId, preview) {
     return new Promise((resolve, reject) => {
       const requestId = crypto.randomUUID();
+      const detail = `**消息:** ${preview}`;
       const timeout = setTimeout(async () => {
         const entry = this._legacyConfirmations.get(requestId);
-        if (entry?.cardMessageId) await this._updateCard(entry.cardMessageId, buildConfirmResultCard('⏰ 确认已超时', 'grey')).catch(() => {});
+        if (entry?.cardMessageId) await this._updateCard(entry.cardMessageId, buildConfirmResultCard('⏰ 确认已超时', 'grey', detail)).catch(() => {});
         this._legacyConfirmations.delete(requestId);
         resolve(false);
       }, 5 * 60 * 1000);
 
       this._legacyConfirmations.set(requestId, {
         resolve: (approved) => { clearTimeout(timeout); this._legacyConfirmations.delete(requestId); resolve(approved); },
-        timeout, cardMessageId: null
+        timeout, cardMessageId: null, detail
       });
 
       this._sendCard(chatId, this._buildLegacyConfirmCard(requestId, preview))
@@ -283,10 +284,30 @@ class FeishuBridge {
       body: {
         elements: [
           { tag: 'markdown', content: `> ${preview}\n\nClaude 将处理此消息。是否允许？` },
-          { tag: 'action', actions: [
-            { tag: 'button', text: { tag: 'plain_text', content: '✅ 允许' }, type: 'primary', value: { requestId, action: 'approve' } },
-            { tag: 'button', text: { tag: 'plain_text', content: '❌ 拒绝' }, type: 'danger', value: { requestId, action: 'deny' } }
-          ]},
+          {
+            tag: 'column_set',
+            flex_mode: 'flow',
+            columns: [
+              {
+                tag: 'column', width: 'auto', weight: 1, vertical_align: 'top',
+                elements: [{
+                  tag: 'button',
+                  text: { tag: 'plain_text', content: '✅ 允许' },
+                  type: 'primary',
+                  behaviors: [{ type: 'callback', value: { requestId, action: 'approve' } }]
+                }]
+              },
+              {
+                tag: 'column', width: 'auto', weight: 1, vertical_align: 'top',
+                elements: [{
+                  tag: 'button',
+                  text: { tag: 'plain_text', content: '❌ 拒绝' },
+                  type: 'danger',
+                  behaviors: [{ type: 'callback', value: { requestId, action: 'deny' } }]
+                }]
+              }
+            ]
+          },
           { tag: 'markdown', content: '_⏳ 5 分钟内未操作将自动拒绝_' }
         ]
       }

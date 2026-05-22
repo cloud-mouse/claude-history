@@ -154,7 +154,7 @@ async function cmdNew(ctx) {
   if (!await requireBinding(ctx)) return;
   const newSessionId = crypto.randomUUID();
   const realCwd = resolveCwd(binding.jsonl_path) || binding.project_dir;
-  const slug = realCwd.replace(/\//g, '-').replace(/_/g, '-');
+  const slug = realCwd.replace(/\//g, '-');
   const newJsonlPath = path.join(os.homedir(), '.claude', 'projects', slug, `${newSessionId}.jsonl`);
   store.updateBinding(binding.chat_id, { session_id: newSessionId, jsonl_path: newJsonlPath });
   await ctx.sendCard(chatId, buildSuccessCard('✅ 已开启新会话', [
@@ -178,7 +178,7 @@ async function cmdCd(ctx) {
   if (!fs.existsSync(targetPath)) { await ctx.sendCard(chatId, buildErrorCard(`路径不存在: ${targetPath}`)); return; }
   if (!fs.statSync(targetPath).isDirectory()) { await ctx.sendCard(chatId, buildErrorCard(`不是目录: ${targetPath}`)); return; }
   const newSessionId = crypto.randomUUID();
-  const slug = targetPath.replace(/\//g, '-').replace(/_/g, '-');
+  const slug = targetPath.replace(/\//g, '-');
   const newJsonlPath = path.join(os.homedir(), '.claude', 'projects', slug, `${newSessionId}.jsonl`);
   store.updateBinding(binding.chat_id, { project_dir: targetPath, session_id: newSessionId, jsonl_path: newJsonlPath });
   await ctx.sendCard(chatId, buildSuccessCard('✅ 已切换工作目录', [
@@ -223,7 +223,7 @@ async function cmdSessions(ctx) {
   const { chatId, binding } = ctx;
   if (!await requireBinding(ctx)) return;
   const realCwd = resolveCwd(binding.jsonl_path) || binding.project_dir;
-  const slug = realCwd.replace(/\//g, '-').replace(/_/g, '-');
+  const slug = realCwd.replace(/\//g, '-');
   const projectDir = path.join(os.homedir(), '.claude', 'projects', slug);
   if (!fs.existsSync(projectDir)) { await ctx.sendCard(chatId, buildInfoCard('📭 会话列表', '当前项目暂无会话记录', 'grey')); return; }
   const files = fs.readdirSync(projectDir).filter(f => f.endsWith('.jsonl')).map(f => {
@@ -246,7 +246,7 @@ async function cmdSwitch(ctx) {
   if (!await requireBinding(ctx)) return;
   if (!args) { await ctx.sendCard(chatId, buildWarningCard('❌ 缺少参数', '请指定会话序号或 ID\n例: `/switch 1`')); return; }
   const realCwd = resolveCwd(binding.jsonl_path) || binding.project_dir;
-  const slug = realCwd.replace(/\//g, '-').replace(/_/g, '-');
+  const slug = realCwd.replace(/\//g, '-');
   const projectDir = path.join(os.homedir(), '.claude', 'projects', slug);
   if (!fs.existsSync(projectDir)) { await ctx.sendCard(chatId, buildErrorCard('项目目录不存在')); return; }
   const files = fs.readdirSync(projectDir).filter(f => f.endsWith('.jsonl')).map(f => {
