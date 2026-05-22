@@ -6,14 +6,12 @@
 function buildResponseCard(response) {
   const text = String(response || '(空响应)').trim();
   const MAX_LEN = 3500;
-
   let content;
   if (text.length <= MAX_LEN) {
     content = text;
   } else {
     content = smartTruncate(text, MAX_LEN) + '\n\n_...（内容过长已截断）_';
   }
-
   return {
     schema: '2.0',
     config: { width_mode: 'fill' },

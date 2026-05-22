@@ -95,6 +95,7 @@ function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, onToolUse
     let stderr = '';
     let jsonBuf = '';
     let resultText = '';
+    let resolved = false;
 
     child.stdout.on('data', (data) => {
       jsonBuf += data.toString();
@@ -112,6 +113,12 @@ function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, onToolUse
               if (block.type === 'tool_use') onToolUse(block.name, block.input);
             }
           }
+          // Early resolve: send result as soon as we get it, don't wait for process exit
+          if (obj.type === 'result' && !resolved) {
+            resolved = true;
+            clearTimeout(timer);
+            resolve(resultText || '(空响应)');
+          }
         } catch {}
       }
     });
@@ -128,6 +135,7 @@ function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, onToolUse
     child.on('close', (code) => {
       clearTimeout(timer);
       if (settingsPath) try { fs.unlinkSync(settingsPath); } catch {}
+      if (resolved) return; // Already resolved via early result
       if (code === 0) resolve(resultText || '(空响应)');
       else reject(new Error(`Claude Code 错误: ${(stderr.trim() || 'exit code ' + code).slice(0, 200)}`));
     });

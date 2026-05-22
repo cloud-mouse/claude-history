@@ -199,14 +199,14 @@ class FeishuBridge {
       const response = await this._doSpawnClaude({ sessionId: binding.session_id, jsonlPath: binding.jsonl_path, message: messageText, chatId });
       this._touchConversation(binding.jsonl_path);
 
-      // Remove thinking reaction before sending result
-      if (reactionId) await this._deleteReaction(msg.messageId, reactionId);
+      // Send card immediately, delete reaction in background
+      if (reactionId) this._deleteReaction(msg.messageId, reactionId).catch(() => {});
 
       await this._sendCard(chatId, buildResponseCard(response));
       this._lastMessage = messageText;
       this._notifyRenderer('feishu:jsonlChanged', { jsonlPath: binding.jsonl_path, sessionId: binding.session_id });
     } catch (err) {
-      if (reactionId) await this._deleteReaction(msg.messageId, reactionId);
+      if (reactionId) this._deleteReaction(msg.messageId, reactionId).catch(() => {});
       await this._sendCard(chatId, buildErrorCard(err.message)).catch(() => {});
     } finally {
       this._processing = false;
