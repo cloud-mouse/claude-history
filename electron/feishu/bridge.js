@@ -11,7 +11,7 @@ const { HooksHandler } = require('./hooks-handler');
 const { handleCommand } = require('./commands');
 const { spawnClaude } = require('./claude-spawn');
 const { resolveCwd, watchBinding } = require('./binding');
-const { buildResponseCard, buildAckCard, buildErrorCard, buildWarningCard, buildConfirmResultCard, extractCardText } = require('./cards');
+const { buildResponseCard, buildErrorCard, buildWarningCard, buildConfirmResultCard, extractCardText } = require('./cards');
 
 const CC_DIR = () => path.join(os.homedir(), '.cc-connect');
 
@@ -182,20 +182,26 @@ class FeishuBridge {
     this._notifyRenderer('feishu:statusChanged', { processing: true });
     const preview = messageText.length > 30 ? messageText.slice(0, 30) + '...' : messageText;
 
+    let reactionId = null;
     try {
       if (this._confirmMode) {
         const approved = await this._requestConfirmation(chatId, preview);
         if (!approved) return;
       } else {
-        await this._sendCard(chatId, buildAckCard(preview));
+        reactionId = await this._addReaction(msg.messageId, 'Typing');
       }
 
       const response = await this._doSpawnClaude({ sessionId: binding.session_id, jsonlPath: binding.jsonl_path, message: messageText, chatId });
       this._touchConversation(binding.jsonl_path);
+
+      // Remove thinking reaction before sending result
+      if (reactionId) await this._deleteReaction(msg.messageId, reactionId);
+
       await this._sendCard(chatId, buildResponseCard(response));
       this._lastMessage = messageText;
       this._notifyRenderer('feishu:jsonlChanged', { jsonlPath: binding.jsonl_path, sessionId: binding.session_id });
     } catch (err) {
+      if (reactionId) await this._deleteReaction(msg.messageId, reactionId);
       await this._sendCard(chatId, buildErrorCard(err.message)).catch(() => {});
     } finally {
       this._processing = false;
@@ -361,6 +367,28 @@ class FeishuBridge {
         data: { receive_id: chatId, msg_type: 'text', content: JSON.stringify({ text: String(text).slice(0, 4000) }) }
       });
     } catch (err) { console.error('[feishu] Failed to send reply:', err.message); }
+  }
+
+  /** Add a reaction emoji to a message. Returns the reaction ID, or null. */
+  async _addReaction(messageId, emojiType) {
+    if (!this.client || !messageId) return null;
+    try {
+      const resp = await this.client.im.v1.messageReaction.create({
+        path: { message_id: messageId },
+        data: { reaction_type: { emoji_type: emojiType } }
+      });
+      return resp?.data?.reaction_id || null;
+    } catch (err) { console.error('[feishu] Failed to add reaction:', err.message); return null; }
+  }
+
+  /** Remove a reaction emoji from a message. */
+  async _deleteReaction(messageId, reactionId) {
+    if (!this.client || !messageId || !reactionId) return;
+    try {
+      await this.client.im.v1.messageReaction.delete({
+        path: { message_id: messageId, reaction_id: reactionId }
+      });
+    } catch (err) { console.error('[feishu] Failed to delete reaction:', err.message); }
   }
 
   async _sendCard(chatId, card) {
