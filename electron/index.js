@@ -2,7 +2,7 @@ const { app, BrowserWindow, Menu, ipcMain } = require('electron');
 const path = require('path');
 const { registerIpcHandlers } = require('./ipc-handlers');
 const { registerFeishuIpc } = require('./feishu-ipc');
-const { FeishuBridge } = require('./feishu-bridge');
+const { FeishuBridge } = require('./feishu');
 
 let mainWindow;
 let feishuBridge = null;
@@ -99,11 +99,11 @@ app.whenReady().then(() => {
   createWindow();
   createMenu();
 
-  // Auto-start Feishu bridge if configured
+  // Auto-start Feishu bridge if credentials are configured
   try {
     const store = getStore();
     const config = store.getFeishuConfig();
-    if (config && config.app_id && config.enabled) {
+    if (config && config.app_id && config.app_secret) {
       feishuBridge.start().catch(err => {
         console.error('[feishu] Auto-start failed:', err.message);
       });
