@@ -201,6 +201,8 @@ onMounted(() => {
   feishuStore.detect();
 
   // Register event listeners for real-time updates (with cleanup)
+  let _jsonlDebounce = null;
+  let _reloadDebounce = null;
   _unsubs.push(
     window.electronAPI.onFeishuStatusChanged((data) => {
       feishuStore.handleStatusChanged(data);
@@ -208,15 +210,21 @@ onMounted(() => {
   );
   _unsubs.push(
     window.electronAPI.onFeishuJsonlChanged((data) => {
-      // Force-reload current conversation if it matches
+      // Debounce reload of active conversation
       if (conversationsStore.activeConversation?.filePath === data.jsonlPath) {
-        conversationsStore.reloadByFilePath(data.jsonlPath);
+        clearTimeout(_reloadDebounce);
+        _reloadDebounce = setTimeout(() => {
+          conversationsStore.reloadByFilePath(data.jsonlPath);
+        }, 500);
       }
-      // Refresh conversation list so updated timestamps show up
-      const selectedProject = projectsStore.selectedProject;
-      if (selectedProject) {
-        projectsStore.refreshConversations(selectedProject.id);
-      }
+      // Debounce conversation list refresh (Claude writes JSONL multiple times)
+      clearTimeout(_jsonlDebounce);
+      _jsonlDebounce = setTimeout(() => {
+        const selectedProject = projectsStore.selectedProject;
+        if (selectedProject) {
+          projectsStore.refreshConversations(selectedProject.id);
+        }
+      }, 1000);
     })
   );
 });

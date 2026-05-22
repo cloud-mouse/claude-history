@@ -48,7 +48,7 @@ export const useProjectsStore = defineStore('projects', () => {
   async function refreshConversations(projectId) {
     try {
       const result = await window.electronAPI.getConversations(projectId);
-      if (result.success && result.conversations) {
+      if (result.success && result.conversations && result.conversations.length > 0) {
         const proj = projects.value.find(p => p.id === projectId);
         if (proj) {
           proj.conversations = result.conversations;
