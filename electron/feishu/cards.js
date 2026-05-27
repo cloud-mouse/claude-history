@@ -5,13 +5,12 @@
  */
 function buildResponseCard(response) {
   const text = String(response || '(空响应)').trim();
-  const MAX_LEN = 3500;
-  let content;
-  if (text.length <= MAX_LEN) {
-    content = text;
-  } else {
-    content = smartTruncate(text, MAX_LEN) + '\n\n_...（内容过长已截断）_';
-  }
+  // Each Feishu markdown element supports ~30000 chars; split into chunks of 8000
+  // to stay safe and keep each part readable on mobile.
+  const CHUNK_SIZE = 8000;
+  const contentElements = splitMarkdownChunks(text, CHUNK_SIZE).map(
+    chunk => ({ tag: 'markdown', content: chunk })
+  );
   return {
     schema: '2.0',
     config: { width_mode: 'fill' },
@@ -21,7 +20,7 @@ function buildResponseCard(response) {
     },
     body: {
       elements: [
-        { tag: 'markdown', content },
+        ...contentElements,
         { tag: 'hr' },
         { tag: 'markdown', content: '_由 Claude Code 飞书桥接驱动_' }
       ]
@@ -222,6 +221,25 @@ function buildPermissionCard(requestId, toolName, toolInput, cwd) {
       ]
     }
   };
+}
+
+/**
+ * Split long text into chunks, breaking at newline or space boundaries.
+ * Each chunk stays within maxLen characters.
+ */
+function splitMarkdownChunks(text, maxLen) {
+  if (text.length <= maxLen) return [text];
+  const chunks = [];
+  let remaining = text;
+  while (remaining.length > maxLen) {
+    let cut = remaining.lastIndexOf('\n', maxLen);
+    if (cut < maxLen * 0.3) cut = remaining.lastIndexOf(' ', maxLen);
+    if (cut < maxLen * 0.3) cut = maxLen;
+    chunks.push(remaining.slice(0, cut).trimEnd());
+    remaining = remaining.slice(cut).trimStart();
+  }
+  if (remaining.length > 0) chunks.push(remaining);
+  return chunks;
 }
 
 /**

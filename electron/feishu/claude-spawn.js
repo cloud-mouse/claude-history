@@ -75,11 +75,7 @@ function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, onToolUse
 
     const { resolveCwd } = require('./binding');
     const cwd = resolveCwd(jsonlPath);
-    if (cwd) {
-      const slug = cwd.replace(/\//g, '-');
-      const sessionFile = path.join(os.homedir(), '.claude', 'projects', slug, `${sessionId}.jsonl`);
-      if (fs.existsSync(sessionFile)) args.push('--resume', sessionId);
-    }
+    if (fs.existsSync(jsonlPath)) args.push('--resume', sessionId);
 
     const claudeBin = resolveClaudeBinary();
     console.log(`[feishu:spawn] ${claudeBin} ${args.join(' ')} in ${cwd || 'default cwd'}`);
@@ -116,7 +112,6 @@ function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, onToolUse
           // Early resolve: send result as soon as we get it, don't wait for process exit
           if (obj.type === 'result' && !resolved) {
             resolved = true;
-            clearTimeout(timer);
             resolve(resultText || '(空响应)');
           }
         } catch {}
@@ -125,15 +120,9 @@ function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, onToolUse
 
     child.stderr.on('data', (data) => { stderr += data.toString(); });
 
-    const timer = setTimeout(() => {
-      try { child.kill('SIGTERM'); } catch {}
-      const killTimer = setTimeout(() => { try { child.kill('SIGKILL'); } catch {} }, 10000);
-      killTimer.unref();
-      reject(new Error('Claude Code 超时（5分钟）'));
-    }, 300000);
+    // No timeout — let Claude run until it finishes or the user kills it with /kill
 
     child.on('close', (code) => {
-      clearTimeout(timer);
       if (settingsPath) try { fs.unlinkSync(settingsPath); } catch {}
       if (resolved) return; // Already resolved via early result
       if (code === 0) resolve(resultText || '(空响应)');
@@ -141,7 +130,6 @@ function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, onToolUse
     });
 
     child.on('error', (err) => {
-      clearTimeout(timer);
       if (settingsPath) try { fs.unlinkSync(settingsPath); } catch {}
       reject(new Error(`无法启动 Claude Code: ${err.message}`));
     });
