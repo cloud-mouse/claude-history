@@ -8,6 +8,29 @@
     "url": "https://github.com/cloud-mouse/claude-history.git"
   },
   "build": {
+    "appId": "com.cloud-mouse.claude-history",
+    "productName": "Claude History",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "!node_modules"
+    ],
+    "mac": {
+      "icon": "build/icon.icns",
+      "target": ["dmg", "zip"]
+    },
+    "win": {
+      "icon": "build/icon.512x512.png",
+      "target": ["nsis", "portable"]
+    },
+    "linux": {
+      "icon": "build/icon.512x512.png",
+      "target": ["AppImage", "snap"],
+      "category": "Utility"
+    },
     "publish": {
       "provider": "github",
       "owner": "cloud-mouse",
