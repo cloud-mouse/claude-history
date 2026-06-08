@@ -3,6 +3,7 @@ const path = require('path');
 const { registerIpcHandlers } = require('./ipc-handlers');
 const { registerFeishuIpc } = require('./feishu-ipc');
 const { FeishuBridge } = require('./feishu');
+const { initUpdater, registerUpdaterIpc, isForceRestart, checkForUpdates } = require('./updater');
 
 let mainWindow;
 let feishuBridge = null;
@@ -31,6 +32,12 @@ function createWindow() {
 
   // Register IPC handlers after window creation
   registerIpcHandlers();
+
+  // Initialize auto-updater (only in production builds)
+  if (!isDev) {
+    initUpdater(mainWindow);
+    registerUpdaterIpc();
+  }
 
   // Initialize Feishu bridge
   const store = getStore();
@@ -115,6 +122,15 @@ app.whenReady().then(() => {
   } catch (e) {
     // Store might not be ready yet
   }
+
+  // Auto-check for updates after 3 seconds (production only)
+  if (app.isPackaged) {
+    setTimeout(() => {
+      checkForUpdates().catch(err => {
+        console.error('[updater] auto-check failed:', err.message);
+      });
+    }, 3000);
+  }
 });
 
 app.on('window-all-closed', () => {
@@ -123,7 +139,7 @@ app.on('window-all-closed', () => {
 
 let isQuitting = false;
 app.on('before-quit', (e) => {
-  if (isQuitting) return;
+  if (isQuitting || isForceRestart()) return;
   if (feishuBridge) {
     e.preventDefault();
     isQuitting = true;

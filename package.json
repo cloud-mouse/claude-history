@@ -1,8 +1,19 @@
 {
   "name": "claude-history",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "Browse Claude Code conversation history",
   "main": "electron/index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cloud-mouse/claude-history.git"
+  },
+  "build": {
+    "publish": {
+      "provider": "github",
+      "owner": "cloud-mouse",
+      "repo": "claude-history"
+    }
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -17,6 +28,7 @@
   "dependencies": {
     "@larksuiteoapi/node-sdk": "^1.65.0",
     "better-sqlite3": "^11.7.0",
+    "electron-updater": "^6.8.9",
     "highlight.js": "^11.10.0",
     "marked": "^18.0.2",
     "pinia": "^2.3.0",

@@ -23,7 +23,43 @@ contextBridge.exposeInMainWorld('electronAPI', {
   feishuUnbindSession: () => ipcRenderer.invoke('feishu:unbindSession'),
   feishuGetBinding: (jsonlPath) => ipcRenderer.invoke('feishu:getBinding', jsonlPath),
 
+  // Updater API
+  updaterCheck: () => ipcRenderer.invoke('updater:check'),
+  updaterDownload: () => ipcRenderer.invoke('updater:download'),
+  updaterInstall: () => ipcRenderer.invoke('updater:install'),
+
   // Event listeners (main → renderer) — returns unsubscribe function
+  onUpdaterChecking: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on('updater:checking', handler);
+    return () => ipcRenderer.removeListener('updater:checking', handler);
+  },
+  onUpdaterAvailable: (callback) => {
+    const handler = (_, data) => callback(data);
+    ipcRenderer.on('updater:available', handler);
+    return () => ipcRenderer.removeListener('updater:available', handler);
+  },
+  onUpdaterNotAvailable: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on('updater:not-available', handler);
+    return () => ipcRenderer.removeListener('updater:not-available', handler);
+  },
+  onUpdaterProgress: (callback) => {
+    const handler = (_, data) => callback(data);
+    ipcRenderer.on('updater:progress', handler);
+    return () => ipcRenderer.removeListener('updater:progress', handler);
+  },
+  onUpdaterDownloaded: (callback) => {
+    const handler = (_, data) => callback(data);
+    ipcRenderer.on('updater:downloaded', handler);
+    return () => ipcRenderer.removeListener('updater:downloaded', handler);
+  },
+  onUpdaterError: (callback) => {
+    const handler = (_, data) => callback(data);
+    ipcRenderer.on('updater:error', handler);
+    return () => ipcRenderer.removeListener('updater:error', handler);
+  },
+
   onFeishuStatusChanged: (callback) => {
     const handler = (_, data) => callback(data);
     ipcRenderer.on('feishu:statusChanged', handler);

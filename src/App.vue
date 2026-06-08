@@ -41,6 +41,7 @@
         :style="{ width: middleCollapsed ? '0px' : middlePanelWidth + 'px' }"
       >
         <div class="panel-header-actions">
+          <UpdateNotification />
           <button class="settings-btn" @click="showSettings = true" title="设置"
             :class="{ connected: feishuStore.connected }">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -99,12 +100,15 @@ import ConversationList from './components/layout/ConversationList.vue';
 import MessageThread from './components/layout/MessageThread.vue';
 import ThemeSelector from './components/common/ThemeSelector.vue';
 import SettingsModal from './components/feishu/SettingsModal.vue';
+import UpdateNotification from './components/common/UpdateNotification.vue';
 import { useFeishuStore } from './stores/feishu';
+import { useUpdaterStore } from './stores/updater';
 
 const projectsStore = useProjectsStore();
 const conversationsStore = useConversationsStore();
 const themeStore = useThemeStore();
 const feishuStore = useFeishuStore();
+const updaterStore = useUpdaterStore();
 
 const showSettings = ref(false);
 
@@ -226,6 +230,16 @@ onMounted(() => {
         }
       }, 1000);
     })
+  );
+
+  // Updater event listeners
+  _unsubs.push(
+    window.electronAPI.onUpdaterChecking(() => updaterStore.handleChecking()),
+    window.electronAPI.onUpdaterAvailable((info) => updaterStore.handleAvailable(info)),
+    window.electronAPI.onUpdaterNotAvailable(() => updaterStore.handleNotAvailable()),
+    window.electronAPI.onUpdaterProgress((p) => updaterStore.handleProgress(p)),
+    window.electronAPI.onUpdaterDownloaded((info) => updaterStore.handleDownloaded(info)),
+    window.electronAPI.onUpdaterError((err) => updaterStore.handleError(err))
   );
 });
 
