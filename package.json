@@ -1,6 +1,6 @@
 {
   "name": "claude-history",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Browse Claude Code conversation history",
   "main": "electron/index.js",
   "repository": {
@@ -28,15 +28,23 @@
     ],
     "mac": {
       "icon": "build/icon.icns",
-      "target": ["dmg", "zip"]
+      "target": [
+        "dmg",
+        "zip"
+      ]
     },
     "win": {
       "icon": "build/icon.512x512.png",
-      "target": ["nsis", "portable"]
+      "target": [
+        "nsis",
+        "portable"
+      ]
     },
     "linux": {
       "icon": "build/icon.512x512.png",
-      "target": ["AppImage"],
+      "target": [
+        "AppImage"
+      ],
       "category": "Utility"
     },
     "publish": {
