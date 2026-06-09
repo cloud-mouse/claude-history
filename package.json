@@ -28,7 +28,7 @@
     },
     "linux": {
       "icon": "build/icon.512x512.png",
-      "target": ["AppImage", "snap"],
+      "target": ["AppImage"],
       "category": "Utility"
     },
     "publish": {
