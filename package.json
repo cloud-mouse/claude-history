@@ -13,10 +13,18 @@
     "directories": {
       "output": "dist"
     },
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**/*"
+    ],
     "files": [
       "dist/**/*",
       "electron/**/*",
-      "!node_modules"
+      "!dist/mac-arm64",
+      "!dist/*.dmg",
+      "!dist/*.zip",
+      "!dist/*.blockmap",
+      "!dist/*.yml"
     ],
     "mac": {
       "icon": "build/icon.icns",
