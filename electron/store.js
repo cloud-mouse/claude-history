@@ -273,6 +273,42 @@ class Store {
     return this.db.prepare('SELECT * FROM conversations').all();
   }
 
+  /** All conversations newest-first. Used by the manual "reindex all" action so
+   *  already-indexed-but-stale sessions also get refreshed (backfillConversation
+   *  re-indexes any whose file mtime is newer than stats_updated_at). */
+  getAllConversationsOrdered() {
+    return this.db.prepare('SELECT * FROM conversations ORDER BY updated_at DESC').all();
+  }
+
+  /** Conversations not yet indexed (stats_updated_at = 0), newest first. */
+  getConversationsNeedingBackfill(limit = 1000) {
+    return this.db.prepare(
+      'SELECT * FROM conversations WHERE stats_updated_at = 0 ORDER BY updated_at DESC LIMIT ?'
+    ).all(limit);
+  }
+
+  /**
+   * Re-index a whole conversation in a SINGLE transaction: clear old FTS rows,
+   * bulk-insert new ones, then update token stats. Turns N per-message fsyncs
+   * into one — critical so backfill doesn't lock up the main process.
+   */
+  reindexConversation(convId, items, tokenStats) {
+    const tx = this.db.transaction(() => {
+      this.clearFtsForConversation(convId);
+      const ins = this.db.prepare(
+        'INSERT INTO messages_fts (text, conversation_id, message_id, role) VALUES (?, ?, ?, ?)'
+      );
+      for (const it of items) {
+        if (!it.messageId) continue;
+        const t = typeof it.text === 'string' ? it.text.trim() : '';
+        if (!t) continue;
+        ins.run(t.slice(0, 50000), convId, it.messageId, it.role || '');
+      }
+      this.updateTokens(convId, tokenStats);
+    });
+    tx();
+  }
+
   /**
    * Overwrite a conversation's token stats. Written by the backfill engine
    * (which re-aggregates the whole file), so this is a full replace.

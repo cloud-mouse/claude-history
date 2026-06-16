@@ -80,7 +80,7 @@ function generateHookSettings(hookPort, hookToken) {
  * @param {string} opts.permissionMode - internal PermissionManager mode (default|plan|acceptEdits|bypass)
  * @param {Function} [opts.onSpawn] - invoked with the child process so the caller can store/kill it
  */
-function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, hookToken, permissionMode, onSpawn, onToolUse }) {
+function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, hookToken, permissionMode, onSpawn, onToolUse, onProgress, addDirs }) {
   return new Promise((resolve, reject) => {
     const args = ['-p', message, '--output-format', 'stream-json', '--verbose', '--permission-mode', toClaudePermissionMode(permissionMode)];
     if (model) args.push('--model', model);
@@ -89,6 +89,10 @@ function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, hookToken
     if (hookPort && hookToken) {
       settingsPath = generateHookSettings(hookPort, hookToken);
       args.push('--settings', settingsPath);
+    }
+    // Grant Claude read access to extra dirs (e.g. the attachment download dir).
+    if (Array.isArray(addDirs)) {
+      for (const d of addDirs) args.push('--add-dir', d);
     }
 
     const { resolveCwd } = require('./binding');
@@ -136,9 +140,16 @@ function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, hookToken
             };
           }
           const content = obj.message?.content;
-          if (Array.isArray(content) && onToolUse) {
+          if (Array.isArray(content)) {
+            const isAssistant = obj.type === 'assistant';
             for (const block of content) {
-              if (block.type === 'tool_use') onToolUse(block.name, block.input);
+              if (block.type === 'tool_use' && onToolUse) onToolUse(block.name, block.input);
+              // Stream assistant progress (thinking / text / tool calls) to the bridge.
+              if (onProgress && isAssistant) {
+                if (block.type === 'thinking' && block.thinking) onProgress({ type: 'thinking', text: block.thinking });
+                else if (block.type === 'text' && block.text) onProgress({ type: 'text', text: block.text });
+                else if (block.type === 'tool_use') onProgress({ type: 'tool', name: block.name, input: block.input });
+              }
             }
           }
           // Early resolve: send result as soon as we get it, don't wait for process exit

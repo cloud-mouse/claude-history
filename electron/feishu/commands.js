@@ -277,11 +277,10 @@ async function cmdRepeat(ctx) {
     try {
       const currentBinding = store.getBindingByChatId(chatId);
       if (!currentBinding) throw new Error('绑定已失效');
-      const { buildResponseCard } = require('./cards');
-      const response = await ctx.spawnClaude({ sessionId: currentBinding.session_id, jsonlPath: currentBinding.jsonl_path, message: lastMessage, chatId });
-      await ctx.sendCard(chatId, buildResponseCard(response));
+      await ctx.spawnClaude({ sessionId: currentBinding.session_id, jsonlPath: currentBinding.jsonl_path, message: lastMessage, chatId });
+      // The final answer is rendered into the live progress card by spawnClaude.
       ctx.notifyRenderer('feishu:jsonlChanged', { jsonlPath: currentBinding.jsonl_path, sessionId: currentBinding.session_id });
-    } catch (err) { await ctx.sendCard(chatId, buildErrorCard(err.message)).catch(() => {}); }
+    } catch (err) { if (!err._cardHandled) await ctx.sendCard(chatId, buildErrorCard(err.message)).catch(() => {}); }
   });
 }
 
@@ -296,11 +295,10 @@ async function cmdSystem(ctx) {
     try {
       const currentBinding = store.getBindingByChatId(chatId);
       if (!currentBinding) throw new Error('绑定已失效');
-      const { buildResponseCard } = require('./cards');
-      const response = await ctx.spawnClaude({ sessionId: currentBinding.session_id, jsonlPath: currentBinding.jsonl_path, message: `[System Instruction] ${args}`, chatId });
-      await ctx.sendCard(chatId, buildResponseCard(response));
+      await ctx.spawnClaude({ sessionId: currentBinding.session_id, jsonlPath: currentBinding.jsonl_path, message: `[System Instruction] ${args}`, chatId });
+      // The final answer is rendered into the live progress card by spawnClaude.
       ctx.notifyRenderer('feishu:jsonlChanged', { jsonlPath: currentBinding.jsonl_path, sessionId: currentBinding.session_id });
-    } catch (err) { await ctx.sendCard(chatId, buildErrorCard(err.message)).catch(() => {}); }
+    } catch (err) { if (!err._cardHandled) await ctx.sendCard(chatId, buildErrorCard(err.message)).catch(() => {}); }
   });
 }
 

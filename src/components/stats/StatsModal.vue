@@ -78,6 +78,23 @@
                 </span>
                 <span v-if="!statsStore.data.byModel.length" class="empty">暂无数据</span>
               </div>
+
+              <h3>历史索引</h3>
+              <div class="reindex-section">
+                <p class="reindex-hint">应用启动时仅索引了最近 {{ statsStore.data?.backfillLimit ?? 30 }} 个会话。点下方按钮扫描并更新全部历史（后台进行、不卡顿，仅重处理有变化的会话），让全文搜索与统计覆盖所有会话。取消时会在当前会话处理完成后生效。</p>
+                <div v-if="!statsStore.reindexing" class="reindex-idle">
+                  <button class="reindex-btn" @click="statsStore.reindexAll()">🔄 索引全部历史</button>
+                </div>
+                <div v-else class="reindex-active">
+                  <div class="progress-bar-track">
+                    <div class="progress-bar" :style="{ width: reindexPct + '%' }"></div>
+                  </div>
+                  <div class="progress-row">
+                    <span class="progress-text">{{ statsStore.reindexProgress?.scanned || 0 }} / {{ statsStore.reindexProgress?.total || 0 }}（已索引 {{ statsStore.reindexProgress?.updated || 0 }}）</span>
+                    <button class="cancel-btn" @click="statsStore.cancelReindex()">取消</button>
+                  </div>
+                </div>
+              </div>
             </template>
 
             <button class="refresh-btn" @click="statsStore.loadOverview()" :disabled="statsStore.loading">
@@ -91,7 +108,7 @@
 </template>
 
 <script setup>
-import { computed, watch } from 'vue';
+import { computed, watch, onMounted, onUnmounted } from 'vue';
 import { useStatsStore } from '../../stores/stats';
 
 const props = defineProps({ show: Boolean });
@@ -100,6 +117,19 @@ defineEmits(['close']);
 const statsStore = useStatsStore();
 
 watch(() => props.show, (v) => { if (v) statsStore.loadOverview(); });
+
+// Subscribe to reindex progress events (the component instance is always mounted).
+const _unsubs = [];
+onMounted(() => {
+  _unsubs.push(window.electronAPI.onStatsReindexProgress((p) => statsStore.handleReindexProgress(p)));
+});
+onUnmounted(() => { for (const u of _unsubs) try { u(); } catch {} });
+
+const reindexPct = computed(() => {
+  const p = statsStore.reindexProgress;
+  if (!p || !p.total) return 0;
+  return Math.min(100, Math.round(p.scanned / p.total * 100));
+});
 
 const totals = computed(() => statsStore.data?.totals || {});
 const totalTokens = computed(() =>
@@ -201,6 +231,24 @@ tbody tr:hover { background: var(--bg-tertiary, #2d2d2d); }
   font-family: var(--font-mono, monospace);
 }
 .model-chip em { font-style: normal; color: var(--text-muted, #888); margin-left: 4px; }
+
+.reindex-section { margin-top: 4px; }
+.reindex-hint { font-size: 12px; color: var(--text-muted, #888); line-height: 1.5; margin: 0 0 10px; }
+.reindex-btn {
+  padding: 8px 16px; border-radius: 6px; border: 1px solid var(--primary, #4a9eff);
+  background: transparent; color: var(--primary, #4a9eff); font-size: 13px;
+  cursor: pointer; transition: all 0.2s;
+}
+.reindex-btn:hover { background: var(--primary, #4a9eff); color: white; }
+.progress-bar-track { height: 10px; background: var(--bg-tertiary, #2d2d2d); border-radius: 5px; overflow: hidden; margin-bottom: 8px; }
+.progress-bar { height: 100%; background: var(--primary, #4a9eff); border-radius: 5px; transition: width 0.3s; }
+.progress-row { display: flex; justify-content: space-between; align-items: center; }
+.progress-text { font-size: 12px; color: var(--text-secondary, #aaa); }
+.cancel-btn {
+  padding: 4px 12px; border-radius: 5px; border: 1px solid var(--border-color, #333);
+  background: transparent; color: var(--text-secondary, #aaa); font-size: 12px; cursor: pointer;
+}
+.cancel-btn:hover { border-color: var(--color-error, #ff6666); color: var(--color-error, #ff6666); }
 
 .refresh-btn {
   margin-top: 20px; padding: 8px 16px; border-radius: 6px; border: 1px solid var(--border-color, #333);

@@ -51,6 +51,10 @@ const MAX_CACHE_SIZE = 20;
 // Track in-flight requests to prevent duplicate parsing
 const pendingRequests = new Map();
 
+// Reindex-all task state (long-running; one at a time).
+let _reindexRunning = false;
+let _reindexCancel = false;
+
 function addToCache(filePath, messages) {
   // Evict oldest entry if at capacity
   if (conversationCache.size >= MAX_CACHE_SIZE) {
@@ -206,19 +210,71 @@ function registerIpcHandlers() {
     try {
       const store = getStore();
       const overview = store.getStatsOverview();
+      const { STARTUP_LIMIT } = require('./backfill');
       return {
         success: true,
         data: {
           totals: overview.totals,
           byProject: overview.byProject,
           byDay: store.getStatsByDay(30),
-          byModel: store.getStatsByModel()
+          byModel: store.getStatsByModel(),
+          backfillLimit: STARTUP_LIMIT
         }
       };
     } catch (err) {
       console.error('[ipc-handlers] stats:get-overview error:', err.message);
       return { success: false, error: err.message };
     }
+  });
+
+  // stats:reindex-all — index ALL un-indexed conversations in batches, reporting
+  // progress via events. Each conversation is one transaction + we yield between
+  // conversations so the UI stays responsive on large histories.
+  ipcMain.handle('stats:reindex-all', async (event) => {
+    if (_reindexRunning) return { success: false, error: '索引任务已在运行' };
+    _reindexRunning = true;
+    _reindexCancel = false;
+    const store = getStore();
+    const { backfillConversation } = require('./backfill');
+    // Walk ALL conversations (newest-first). backfillConversation skips any whose
+    // stats are already newer than the file mtime, so this refreshes stale-but-
+    // already-indexed sessions too — the startup backfill only ever touches the
+    // never-indexed ones, so this button is the only way to catch up the rest.
+    const convs = store.getAllConversationsOrdered();
+    const total = convs.length;
+    let updated = 0;
+    const send = (payload) => {
+      try { if (!event.sender.isDestroyed()) event.sender.send('stats:reindex-progress', payload); } catch {}
+    };
+    send({ scanned: 0, total, updated });
+    try {
+      for (let i = 0; i < convs.length; i++) {
+        if (_reindexCancel) break;
+        try {
+          if (await backfillConversation(store, convs[i])) updated += 1;
+        } catch (err) { console.warn(`[reindex-all] ${convs[i].file_path}:`, err.message); }
+        // Report every few conversations (avoid event spam) and yield each step.
+        if (i % 3 === 0 || i === convs.length - 1) {
+          send({ scanned: i + 1, total, updated });
+        }
+        await new Promise((r) => setImmediate(r));
+      }
+      send({ scanned: _reindexCancel ? updated : total, total, updated, done: true, cancelled: _reindexCancel });
+      return { success: true, total, updated, cancelled: _reindexCancel };
+    } catch (err) {
+      console.error('[ipc-handlers] stats:reindex-all error:', err.message);
+      send({ scanned: updated, total, updated, done: true, error: err.message });
+      return { success: false, error: err.message };
+    } finally {
+      _reindexRunning = false;
+      _reindexCancel = false;
+    }
+  });
+
+  ipcMain.handle('stats:reindex-cancel', async () => {
+    if (!_reindexRunning) return { success: false, error: '没有运行中的索引任务' };
+    _reindexCancel = true;
+    return { success: true };
   });
 
   // 2. get-conversations — Get conversations for a project from SQLite

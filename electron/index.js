@@ -159,13 +159,16 @@ app.whenReady().then(() => {
     }, 3000);
   }
 
-  // Background index/stats backfill (functions 1 & 3). Runs after a short delay
-  // so the window paints first; serial + cooperative so it never blocks the UI.
+  // Background index/stats backfill (functions 1 & 3). Runs after a short delay.
+  // Bounded to the N newest un-indexed sessions per launch (each in one
+  // transaction) so a large history never freezes the UI at startup.
   setTimeout(() => {
-    const { backfillAllPending } = require('./backfill');
-    backfillAllPending(store, ({ scanned, total, updated }) => {
+    const { backfillAllPending, STARTUP_LIMIT } = require('./backfill');
+    backfillAllPending(store, { limit: STARTUP_LIMIT, onProgress: ({ scanned, total, updated }) => {
       if (scanned === total) console.log(`[backfill] done: ${updated}/${total} conversations re-indexed`);
-    }).catch(err => console.warn('[backfill] error:', err.message));
+    } }).catch(err => console.warn('[backfill] error:', err.message));
+    // Purge Feishu attachment downloads older than 7 days so the dir stays bounded.
+    try { require('./feishu/bridge').cleanOldAttachments(); } catch (e) { console.warn('[feishu] attachment cleanup failed:', e.message); }
   }, 5000);
 });
 

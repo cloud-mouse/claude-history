@@ -29,6 +29,34 @@ function buildResponseCard(response) {
 }
 
 /**
+ * Build a live progress card shown while Claude is working (function 2).
+ * Patched in place as thinking / text / tool calls stream in.
+ */
+function buildProgressCard({ preview, thinking, text, tools }) {
+  const elements = [{ tag: 'markdown', content: `> ${preview || ''}\n\n⏳ _Claude 正在处理…_` }];
+  if (thinking) {
+    const t = thinking.length > 400 ? thinking.slice(0, 400) + '…' : thinking;
+    elements.push({ tag: 'markdown', content: `💭 _${t}_` });
+  }
+  if (text) {
+    const t = text.length > 1500 ? text.slice(0, 1500) + '…' : text;
+    elements.push({ tag: 'markdown', content: t });
+  }
+  // Show the last few tool calls as read-only previews (the sensitive-tool
+  // confirmation card is a separate card driven by the hooks system).
+  for (const tool of (tools || []).slice(-3)) {
+    elements.push({ tag: 'hr' });
+    elements.push({ tag: 'markdown', content: buildToolDetail(tool.name, tool.input) });
+  }
+  return {
+    schema: '2.0',
+    config: { width_mode: 'fill' },
+    header: { title: { tag: 'plain_text', content: '⏳ Claude 处理中' }, template: 'blue' },
+    body: { elements }
+  };
+}
+
+/**
  * Build a card for processing acknowledgment.
  */
 function buildAckCard(preview) {
@@ -274,6 +302,7 @@ function extractCardText(card) {
 
 module.exports = {
   buildResponseCard,
+  buildProgressCard,
   buildAckCard,
   buildErrorCard,
   buildInfoCard,

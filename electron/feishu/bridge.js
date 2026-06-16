@@ -11,9 +11,62 @@ const { HooksHandler } = require('./hooks-handler');
 const { handleCommand } = require('./commands');
 const { spawnClaude } = require('./claude-spawn');
 const { resolveCwd, watchBinding } = require('./binding');
-const { buildResponseCard, buildErrorCard, buildWarningCard, buildConfirmResultCard, extractCardText } = require('./cards');
+const { buildResponseCard, buildProgressCard, buildErrorCard, buildWarningCard, buildConfirmResultCard, extractCardText } = require('./cards');
 
 const CC_DIR = () => path.join(os.homedir(), '.cc-connect');
+
+// Per-chat attachment download root. Each chat gets its own subdir so one chat's
+// Claude can't Read another chat's attachments (privacy isolation).
+const ATTACHMENTS_DIR = () => path.join(os.homedir(), '.claude-history', 'attachments');
+
+// Safe filesystem name for a chat id (used as the per-chat subdir).
+function attachmentDirForChat(chatId) {
+  const safe = String(chatId || 'shared').replace(/[^\w.-]/g, '_');
+  return path.join(ATTACHMENTS_DIR(), safe);
+}
+
+// Sniff a real image extension from file magic bytes. Feishu image messages carry
+// no mime type, so we detect png/jpg/webp/gif from the downloaded bytes instead
+// of assuming .png.
+function detectImageExt(filePath) {
+  let fd;
+  try {
+    fd = fs.openSync(filePath, 'r');
+    const sig = Buffer.alloc(12);
+    fs.readSync(fd, sig, 0, 12, 0);
+    if (sig[0] === 0x89 && sig[1] === 0x50 && sig[2] === 0x4e && sig[3] === 0x47) return '.png';
+    if (sig[0] === 0xff && sig[1] === 0xd8 && sig[2] === 0xff) return '.jpg';
+    if (sig.slice(0, 4).toString('latin1') === 'RIFF' && sig.slice(8, 12).toString('latin1') === 'WEBP') return '.webp';
+    const head6 = sig.slice(0, 6).toString('latin1');
+    if (head6 === 'GIF87a' || head6 === 'GIF89a') return '.gif';
+  } catch {} finally { if (fd != null) try { fs.closeSync(fd); } catch {} }
+  return '';
+}
+
+/**
+ * Delete attachment files older than maxAgeDays. Called once at startup so the
+ * attachments dir doesn't grow unbounded. Best-effort: never throws.
+ */
+function cleanOldAttachments(maxAgeDays = 7) {
+  const root = ATTACHMENTS_DIR();
+  let entries;
+  try { entries = fs.readdirSync(root, { withFileTypes: true }); } catch { return; }
+  const cutoff = Date.now() - maxAgeDays * 86400000;
+  for (const ent of entries) {
+    const p = path.join(root, ent.name);
+    try {
+      if (ent.isDirectory()) {
+        for (const f of fs.readdirSync(p, { withFileTypes: true })) {
+          const fp = path.join(p, f.name);
+          try { if (fs.statSync(fp).mtimeMs < cutoff) fs.unlinkSync(fp); } catch {}
+        }
+        try { if (fs.readdirSync(p).length === 0) fs.rmdirSync(p); } catch {}
+      } else if (fs.statSync(p).mtimeMs < cutoff) {
+        fs.unlinkSync(p);
+      }
+    } catch {}
+  }
+}
 
 class FeishuBridge {
   constructor(store, mainWindow) {
@@ -32,6 +85,11 @@ class FeishuBridge {
     this._terminatedByUser = false;
     this._unwatchCleanup = null;
     this._legacyConfirmations = new Map();
+
+    // Streaming progress card state (function 2).
+    this._progressCardId = null;
+    this._progressState = null;
+    this._progressFlushTimer = null;
 
     this._permissions = new PermissionManager();
     this._hooksHandler = new HooksHandler(
@@ -201,39 +259,67 @@ class FeishuBridge {
           reactionId = await this._addReaction(msg.messageId, 'Typing');
         }
 
-        const response = await this._doSpawnClaude({ sessionId: binding.session_id, jsonlPath: binding.jsonl_path, message: messageText, chatId });
+        // Download image/file attachments and fold their local paths into the message (function 4).
+        let fullMessage = messageText;
+        const attachments = msg.attachments || [];
+        let attachmentDirs = null;
+        if (attachments.length > 0) {
+          const refLines = [];
+          for (const att of attachments) {
+            try {
+              const localPath = await this._downloadAttachment(chatId, msg.messageId, att);
+              refLines.push(att.type === 'image'
+                ? `[图片附件: ${localPath}]\n请使用 Read 工具查看这张图片。`
+                : `[文件附件: ${localPath}（${att.fileName}）]\n如需查看内容请用 Read 工具读取。`);
+            } catch (err) {
+              refLines.push(`[附件下载失败: ${att.fileName || att.type} — ${err.message}]`);
+            }
+          }
+          fullMessage = (messageText ? messageText + '\n\n' : '') + refLines.join('\n\n');
+          if (!fullMessage.trim()) fullMessage = '请查看附件。';
+          // Grant Claude read access to ONLY this chat's attachment subdir.
+          attachmentDirs = [attachmentDirForChat(chatId)];
+        }
+
+        await this._doSpawnClaude({ sessionId: binding.session_id, jsonlPath: binding.jsonl_path, message: fullMessage, chatId, addDirs: attachmentDirs });
         this._touchConversation(binding.jsonl_path);
 
         if (reactionId) this._deleteReaction(msg.messageId, reactionId).catch(() => {});
 
-        await this._sendCard(chatId, buildResponseCard(response));
+        // The final answer was rendered into the progress card by _doSpawnClaude.
         this._lastMessage = messageText;
         this._notifyRenderer('feishu:jsonlChanged', { jsonlPath: binding.jsonl_path, sessionId: binding.session_id });
       } catch (err) {
         if (reactionId) this._deleteReaction(msg.messageId, reactionId).catch(() => {});
-        await this._sendCard(chatId, buildErrorCard(err.message)).catch(() => {});
+        if (!err._cardHandled) await this._sendCard(chatId, buildErrorCard(err.message)).catch(() => {});
       }
     });
   }
 
-  _doSpawnClaude({ sessionId, jsonlPath, message, chatId }) {
+  _doSpawnClaude({ sessionId, jsonlPath, message, chatId, addDirs }) {
     const hookPort = this._hooksHandler.port;
     const hookToken = this._hooksHandler.authToken;
     const self = this;
+    const preview = String(message || '').slice(0, 40);
+
+    // Open a live progress card before spawning; it evolves into the final answer.
+    this._startProgressCard(chatId, preview);
+
     return spawnClaude({
       sessionId, jsonlPath, message,
       model: self._model,
       hookPort, hookToken,
       permissionMode: self._permissions.mode,
+      addDirs,
       onSpawn: (child) => {
         // C3: keep the real child so /cancel & terminate actually kill it.
         self._claudeProcess = child;
         child.on('close', () => { if (self._claudeProcess === child) self._claudeProcess = null; });
       },
-      onToolUse: () => {} // Real-time notification handled by hooks system
+      onToolUse: () => {}, // sensitive-tool confirmation handled by hooks system
+      onProgress: (patch) => self._onClaudeProgress(patch)
     }).then(({ text, meta }) => {
-      // Record live-run cost/duration. USD cost is only available from the
-      // real-time result frame, so it is stored per-conversation as "last run".
+      // Record live-run cost/duration (USD cost only available from the result frame).
       if (meta && (meta.costUsd != null || meta.durationMs != null)) {
         try {
           const conv = self.store.getConversationByFilePath(jsonlPath);
@@ -242,8 +328,79 @@ class FeishuBridge {
           });
         } catch (err) { console.warn('[feishu] updateRuntime failed:', err.message); }
       }
-      return text; // Backward-compatible: existing callers expect a string.
+      // Replace the progress card with the final answer (single card evolves).
+      return self._finishProgressCard(chatId, text).then(() => text);
+    }).catch((err) => {
+      self._abortProgressCard(chatId, err.message);
+      if (!err._cardHandled) {
+        const wrapped = new Error(err.message);
+        wrapped._cardHandled = true;
+        throw wrapped;
+      }
+      throw err;
     });
+  }
+
+  // ── Streaming progress card (function 2) ──
+
+  async _startProgressCard(chatId, preview) {
+    if (this._progressFlushTimer) { clearTimeout(this._progressFlushTimer); this._progressFlushTimer = null; }
+    this._progressState = { preview, thinking: '', text: '', tools: [] };
+    this._progressCardId = null;
+    try {
+      this._progressCardId = await this._sendCard(chatId, buildProgressCard(this._progressState));
+    } catch (err) { console.warn('[feishu] progress card send failed:', err.message); }
+  }
+
+  _onClaudeProgress(patch) {
+    if (!this._progressState) return;
+    if (patch.type === 'thinking') {
+      this._progressState.thinking = patch.text || '';
+    } else if (patch.type === 'text') {
+      // stream-json re-emits the assistant message with ACCUMULATED content as it
+      // streams, so appending would duplicate the text. Overwrite to show the
+      // latest tail (consistent with how `thinking` is handled above).
+      const t = patch.text || '';
+      this._progressState.text = t.length > 2000 ? t.slice(-2000) : t;
+    } else if (patch.type === 'tool') {
+      this._progressState.tools.push({ name: patch.name, input: patch.input });
+      if (this._progressState.tools.length > 6) this._progressState.tools = this._progressState.tools.slice(-6);
+    }
+    this._scheduleProgressFlush();
+  }
+
+  _scheduleProgressFlush() {
+    if (this._progressFlushTimer || !this._progressCardId) return;
+    // Throttle: at most one card patch per 1.2s to respect Feishu rate limits.
+    this._progressFlushTimer = setTimeout(() => {
+      this._progressFlushTimer = null;
+      const cardId = this._progressCardId;
+      const state = this._progressState;
+      if (!cardId || !state) return;
+      this._updateCard(cardId, buildProgressCard(state)).catch(() => {});
+    }, 1200);
+  }
+
+  async _finishProgressCard(chatId, finalText) {
+    if (this._progressFlushTimer) { clearTimeout(this._progressFlushTimer); this._progressFlushTimer = null; }
+    const cardId = this._progressCardId;
+    this._progressCardId = null;
+    this._progressState = null;
+    const card = buildResponseCard(finalText);
+    if (cardId) {
+      await this._updateCard(cardId, card).catch(() => {});
+    } else {
+      // Progress card never opened — deliver the answer as a new card.
+      await this._sendCard(chatId, card).catch(() => {});
+    }
+  }
+
+  _abortProgressCard(chatId, errMsg) {
+    if (this._progressFlushTimer) { clearTimeout(this._progressFlushTimer); this._progressFlushTimer = null; }
+    const cardId = this._progressCardId;
+    this._progressCardId = null;
+    this._progressState = null;
+    if (cardId) this._updateCard(cardId, buildErrorCard(errMsg)).catch(() => {});
   }
 
   // H8: single serialized entry point for any spawn path. The check+set is
@@ -394,17 +551,71 @@ class FeishuBridge {
   _normalizeMessage(event) {
     const msg = event?.message;
     if (!msg) return null;
+    const messageType = msg.message_type || 'text';
     let text = '';
+    const attachments = [];
     try {
       const parsed = JSON.parse(msg.content);
-      text = typeof parsed === 'string' ? parsed : parsed.text || msg.content || '';
+      if (messageType === 'image' && parsed && parsed.image_key) {
+        attachments.push({ type: 'image', imageKey: parsed.image_key });
+      } else if (messageType === 'file' && parsed && parsed.file_key) {
+        attachments.push({ type: 'file', fileKey: parsed.file_key, fileName: parsed.file_name || 'attachment' });
+      } else {
+        text = typeof parsed === 'string' ? parsed : (parsed.text || msg.content || '');
+      }
     } catch { text = msg.content || ''; }
     text = text.replace(/^@\S+\s*/, '').trim();
     // C2: capture sender identity for allowlist enforcement.
     const senderOpenId = event?.sender?.sender_id?.open_id
       || event?.event?.sender?.sender_id?.open_id
       || '';
-    return { chatId: msg.chat_id, chatType: msg.chat_type || 'p2p', content: text, text, messageId: msg.message_id, senderOpenId };
+    return { chatId: msg.chat_id, chatType: msg.chat_type || 'p2p', messageType, content: text, text, attachments, messageId: msg.message_id, senderOpenId };
+  }
+
+  /**
+   * Download a user-sent image/file attachment to a private dir (function 4).
+   * Must use im.v1.messageResource.get — image.get/file.get only work for
+   * resources the bot itself uploaded.
+   */
+  async _downloadAttachment(chatId, messageId, attachment) {
+    if (!this.client) throw new Error('飞书未连接，无法下载附件');
+    const dir = attachmentDirForChat(chatId);
+    try { fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); } catch {}
+    const key = attachment.imageKey || attachment.fileKey;
+    const isImage = attachment.type === 'image';
+    // Images get a real extension sniffed from the downloaded bytes below; use
+    // .png as the initial/fallback name (better than .tmp if sniffing fails).
+    const fallbackExt = isImage ? '.png' : (path.extname(attachment.fileName || '') || '.bin');
+    const safeName = `${key}`.replace(/[^\w.-]/g, '_');
+    const localPath = path.join(dir, safeName + fallbackExt);
+
+    const resp = await this.client.im.v1.messageResource.get({
+      params: { type: attachment.type === 'image' ? 'image' : 'file' },
+      path: { message_id: messageId, file_key: key }
+    });
+    if (typeof resp.writeFile === 'function') {
+      await resp.writeFile(localPath);
+    } else if (typeof resp.getReadableStream === 'function') {
+      await new Promise((resolve, reject) => {
+        const ws = fs.createWriteStream(localPath, { mode: 0o600 });
+        resp.getReadableStream().pipe(ws);
+        ws.on('finish', resolve);
+        ws.on('error', reject);
+      });
+    } else {
+      throw new Error('无法获取附件下载流');
+    }
+
+    // For images, rename to an extension matching the actual bytes (Feishu images
+    // are often jpeg/webp, not png) so the file is identified correctly on disk.
+    if (isImage) {
+      const realExt = detectImageExt(localPath);
+      if (realExt && realExt !== fallbackExt) {
+        const finalPath = path.join(dir, safeName + realExt);
+        try { fs.renameSync(localPath, finalPath); return finalPath; } catch {}
+      }
+    }
+    return localPath;
   }
 
   _killClaudeProcess(signal = 'SIGTERM') {
@@ -516,4 +727,4 @@ class FeishuBridge {
   }
 }
 
-module.exports = { FeishuBridge };
+module.exports = { FeishuBridge, cleanOldAttachments };

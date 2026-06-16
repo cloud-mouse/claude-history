@@ -73,8 +73,11 @@ async function backfillConversation(store, conv) {
   }
   if (conv.stats_updated_at && conv.stats_updated_at >= stat.mtimeMs) return false;
 
-  store.clearFtsForConversation(conv.id);
+  // Collect during the async stream, then write in ONE transaction. This keeps
+  // synchronous better-sqlite3 writes off the hot path of stream parsing and
+  // turns N per-message fsyncs into one per conversation.
   const acc = { input: 0, output: 0, cacheRead: 0, cacheCreation: 0, turns: 0, models: new Set() };
+  const items = [];
 
   await parseStream(conv.file_path, (raw) => {
     if (raw.type === 'assistant' && raw.message && raw.message.usage) {
@@ -87,10 +90,10 @@ async function backfillConversation(store, conv) {
       if (raw.message.model) acc.models.add(raw.message.model);
     }
     const text = extractSearchableText(raw);
-    if (text && raw.uuid) store.indexMessage(conv.id, raw.uuid, roleOf(raw), text);
+    if (text && raw.uuid) items.push({ messageId: raw.uuid, role: roleOf(raw), text });
   });
 
-  store.updateTokens(conv.id, {
+  store.reindexConversation(conv.id, items, {
     input: acc.input, output: acc.output,
     cacheRead: acc.cacheRead, cacheCreation: acc.cacheCreation,
     turns: acc.turns, models: [...acc.models], updatedAt: stat.mtimeMs
@@ -98,14 +101,22 @@ async function backfillConversation(store, conv) {
   return true;
 }
 
+// Number of newest un-indexed conversations backfilled per app launch. Kept
+// bounded so a large history never freezes the UI at startup; the rest are
+// indexed on demand via the "索引全部历史" button (see stats:reindex-all).
+const STARTUP_LIMIT = 30;
+
 const yieldTick = () => new Promise(r => setImmediate(r));
 
 /**
  * Backfill all conversations that need it. Serial + cooperative (yields between
  * files) so it never blocks the UI thread. Resolves with {scanned, updated}.
  */
-async function backfillAllPending(store, onProgress) {
-  const convs = store.getAllConversations();
+async function backfillAllPending(store, { limit = STARTUP_LIMIT, onProgress } = {}) {
+  // Only conversations never indexed yet (stats_updated_at = 0), newest first.
+  // Capping the batch keeps the synchronous SQLite work bounded so startup
+  // never freezes the UI on large histories (1000+ sessions).
+  const convs = store.getConversationsNeedingBackfill(limit);
   let updated = 0;
   for (let i = 0; i < convs.length; i++) {
     try {
@@ -120,4 +131,4 @@ async function backfillAllPending(store, onProgress) {
   return { scanned: convs.length, updated };
 }
 
-module.exports = { backfillConversation, backfillAllPending, extractSearchableText };
+module.exports = { backfillConversation, backfillAllPending, extractSearchableText, STARTUP_LIMIT };

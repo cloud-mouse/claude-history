@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   searchConversations: (projectId, query) => ipcRenderer.invoke('search-conversations', projectId, query),
   searchFulltext: (query, projectId) => ipcRenderer.invoke('search-fulltext', query, projectId),
   statsGetOverview: () => ipcRenderer.invoke('stats:get-overview'),
+  statsReindexAll: () => ipcRenderer.invoke('stats:reindex-all'),
+  statsReindexCancel: () => ipcRenderer.invoke('stats:reindex-cancel'),
   updateTitle: (filePath, title) => ipcRenderer.invoke('update-title', filePath, title),
   openExternal: (filePath) => ipcRenderer.invoke('open-external', filePath),
   deleteConversation: (filePath) => ipcRenderer.invoke('delete-conversation', filePath),
@@ -74,5 +76,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_, data) => callback(data);
     ipcRenderer.on('feishu:jsonlChanged', handler);
     return () => ipcRenderer.removeListener('feishu:jsonlChanged', handler);
+  },
+
+  onStatsReindexProgress: (callback) => {
+    const handler = (_, data) => callback(data);
+    ipcRenderer.on('stats:reindex-progress', handler);
+    return () => ipcRenderer.removeListener('stats:reindex-progress', handler);
   }
 });
