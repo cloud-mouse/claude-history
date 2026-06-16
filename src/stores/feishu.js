@@ -5,6 +5,7 @@ export const useFeishuStore = defineStore('feishu', () => {
   // State
   const connected = ref(false);
   const config = ref({ appId: '', hasSecret: false, enabled: false });
+  const allowedUsers = ref([]);   // C2: sender open_id allowlist; empty = allow all
   const binding = ref(null);   // { chatId, jsonlPath, sessionId }
   const processing = ref(false);
   const loading = ref(false);
@@ -35,6 +36,10 @@ export const useFeishuStore = defineStore('feishu', () => {
           enabled: cfg.enabled
         };
       }
+      const allowed = await window.electronAPI.feishuGetAllowedUsers();
+      if (allowed.success) {
+        allowedUsers.value = allowed.allowedUsers || [];
+      }
     } catch (err) {
       error.value = err.message;
     } finally {
@@ -51,6 +56,27 @@ export const useFeishuStore = defineStore('feishu', () => {
         config.value.appId = appId;
         config.value.hasSecret = true;
         config.value.enabled = true;
+      }
+      return result;
+    } catch (err) {
+      error.value = err.message;
+      return { success: false, error: err.message };
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  // C2: persist the sender open_id allowlist. Pass [] to allow everyone.
+  async function saveAllowedUsers(users) {
+    loading.value = true;
+    error.value = null;
+    try {
+      const list = (users || [])
+        .map((s) => String(s).trim())
+        .filter(Boolean);
+      const result = await window.electronAPI.feishuSetAllowedUsers(list);
+      if (result.success) {
+        allowedUsers.value = list;
       }
       return result;
     } catch (err) {
@@ -159,9 +185,9 @@ export const useFeishuStore = defineStore('feishu', () => {
   }
 
   return {
-    connected, config, binding, processing, loading, error,
+    connected, config, allowedUsers, binding, processing, loading, error,
     isBound,
-    detect, saveConfig, start, stop, bindSession, unbind, fetchBinding,
+    detect, saveConfig, saveAllowedUsers, start, stop, bindSession, unbind, fetchBinding,
     handleStatusChanged
   };
 });

@@ -3,9 +3,32 @@
 const http = require('http');
 const crypto = require('crypto');
 const { buildPermissionCard, buildConfirmResultCard, buildToolDetail } = require('./cards');
+const { SENSITIVE_TOOLS } = require('./permissions');
 
 const BASE_PORT = 19876;
 const MAX_PORT_ATTEMPTS = 10;
+
+// Build a "deny" hook response so Claude blocks the tool call (fail-closed).
+function denyResponse(reason) {
+  return {
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'deny',
+      permissionDecisionReason: reason || 'denied by hook safety policy'
+    }
+  };
+}
+
+function allowResponse() {
+  return {
+    hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow' }
+  };
+}
+
+function respond(res, payload, status = 200) {
+  res.writeHead(status, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(payload));
+}
 
 class HooksHandler {
   /**
@@ -21,10 +44,16 @@ class HooksHandler {
     this._getActiveChatId = getActiveChatIdFn;
     this._server = null;
     this._port = null;
+    // Per-instance random token shared with the hook script via env var.
+    // Defends against local processes / DNS-rebinding forging allow decisions.
+    this._authToken = crypto.randomBytes(32).toString('hex');
   }
 
   /** Port the hook server is listening on, or null if not started. */
   get port() { return this._port; }
+
+  /** Shared-secret token the hook script must present on every request. */
+  get authToken() { return this._authToken; }
 
   /**
    * Start the HTTP server. Tries ports BASE_PORT through BASE_PORT + MAX_PORT_ATTEMPTS - 1.
@@ -77,11 +106,27 @@ class HooksHandler {
   /**
    * Handle an incoming HTTP request from feishu-hook-script.js.
    * POST /hook — tool permission check
+   *
+   * Security: every unrecoverable error path denies sensitive tools
+   * (fail-closed). Non-sensitive tools may still be auto-allowed so benign
+   * reads (Read/Glob/Grep) are not blocked when the confirmation channel is
+   * temporarily unavailable.
    */
   async _handleRequest(req, res) {
     if (req.method !== 'POST' || !req.url?.startsWith('/hook')) {
       res.writeHead(404);
       res.end('not found');
+      return;
+    }
+
+    // ── Auth: shared-secret token + Host header (DNS-rebinding defense) ──
+    const host = req.headers['host'] || '';
+    const isLocalHost = host.startsWith('127.0.0.1') || host.startsWith('localhost') || host.startsWith('[::1]');
+    const authHeader = req.headers['authorization'] || '';
+    const expectedAuth = `Bearer ${this._authToken}`;
+    if (!isLocalHost || authHeader !== expectedAuth) {
+      // Treat auth failure as a sensitive-tool denial: never allow on forgery.
+      respond(res, denyResponse('unauthorized'), 401);
       return;
     }
 
@@ -91,32 +136,33 @@ class HooksHandler {
     try {
       hookData = JSON.parse(body);
     } catch {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow' }
-      }));
+      // Malformed payload: we cannot tell which tool is being called, so
+      // deny rather than risk auto-executing something sensitive.
+      respond(res, denyResponse('malformed hook payload'));
       return;
     }
 
     const { tool_name, tool_input, tool_use_id, cwd } = hookData;
+    const isSensitive = SENSITIVE_TOOLS.includes(tool_name);
 
-    // Check if auto-approved
+    // Check if auto-approved (mode-based or explicit allow-list)
     if (this._permissions.isAutoApproved(tool_name)) {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow' }
-      }));
+      respond(res, allowResponse());
       return;
     }
 
-    // Need confirmation — get active chatId
+    // Non-sensitive tools that still reach here (e.g. Read in default mode)
+    // are safe to auto-allow — they cannot mutate the system.
+    if (!isSensitive) {
+      respond(res, allowResponse());
+      return;
+    }
+
+    // ── Sensitive tool: MUST get human confirmation (fail-closed below) ──
     const chatId = this._getActiveChatId();
     if (!chatId) {
-      // No active chat, fail-open
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow' }
-      }));
+      // No active chat to surface a confirmation card to → deny.
+      respond(res, denyResponse('no active chat to confirm sensitive tool'));
       return;
     }
 
@@ -127,6 +173,13 @@ class HooksHandler {
     // Send confirmation card to Feishu
     const card = buildPermissionCard(requestId, tool_name, tool_input || {}, cwd || '');
     const cardMessageId = await this._sendCard(chatId, card).catch(() => null);
+
+    if (!cardMessageId) {
+      // Could not surface the confirmation card → do NOT auto-allow.
+      this._permissions.resolvePending(requestId, 'deny');
+      respond(res, denyResponse('failed to send confirmation card'));
+      return;
+    }
 
     // Store cardMessageId for later updates
     const pending = this._permissions.getPending(requestId);
@@ -149,14 +202,13 @@ class HooksHandler {
     }
 
     // Respond to hook script
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
+    respond(res, {
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
         permissionDecision: result.decision === 'allow' ? 'allow' : 'deny',
         permissionDecisionReason: result.reason || ''
       }
-    }));
+    });
   }
 
   /** Read the full body of an HTTP request. */
@@ -189,7 +241,10 @@ class HooksHandler {
       return this._permissions.resolvePending(requestId, 'deny');
     }
     if (action === 'hook_always_allow') {
-      if (toolName) this._permissions.sessionAllow(toolName);
+      // H9: only allow-list real sensitive tools — reject crafted toolName.
+      if (toolName && SENSITIVE_TOOLS.includes(toolName)) {
+        this._permissions.sessionAllow(toolName);
+      }
       return this._permissions.resolvePending(requestId, 'allow');
     }
 

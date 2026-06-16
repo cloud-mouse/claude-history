@@ -83,8 +83,11 @@ class FeishuBridge {
         }
       },
       'card.action.trigger': async (data) => {
-        try { await this._handleCardAction(data); } catch (err) { console.error('[feishu][cardAction] ERROR:', err.message); }
-        return { toast: { type: 'success', content: '已处理' } };
+        let ok = false;
+        try { ok = await this._handleCardAction(data); }
+        catch (err) { console.error('[feishu][cardAction] ERROR:', err.message); }
+        // H9: report the real outcome instead of always claiming success.
+        return { toast: { type: ok ? 'success' : 'error', content: ok ? '已处理' : '操作未生效（请求已过期或无效）' } };
       },
       // No-op handlers to suppress "no handle" warnings for common events
       'im.message.reaction.created_v1': async () => {},
@@ -149,6 +152,13 @@ class FeishuBridge {
     const chatType = msg.chatType || 'p2p';
     const messageText = this._extractText(msg);
 
+    // C2: enforce sender allowlist. Empty list = allow everyone (backward-compatible).
+    const allowed = this.store.getAllowedUsers();
+    if (allowed.length > 0 && !allowed.includes(msg.senderOpenId)) {
+      await this._sendCard(chatId, buildWarningCard('🚫 无权限', '你没有权限使用此机器人。请联系所有者在桌面端配置白名单。')).catch(() => {});
+      return;
+    }
+
     if (messageText.startsWith('/')) {
       const binding = this.store.getBindingByChatId(chatId) || this._tryPendingBinding(chatId, chatType);
       await handleCommand({
@@ -156,7 +166,7 @@ class FeishuBridge {
         sendCard: (id, card) => this._sendCard(id, card),
         killClaude: () => this._killClaudeProcess('SIGTERM'),
         getProcessing: () => this._processing,
-        setProcessing: (v) => { this._processing = v; },
+        withProcessing: (fn) => this._withProcessing(chatId, fn),
         getModel: () => this._model,
         setModel: (v) => { this._model = v; },
         getLastMessage: () => this._lastMessage,
@@ -178,51 +188,67 @@ class FeishuBridge {
       await this._sendCard(chatId, buildWarningCard('😔 未绑定会话', '此飞书会话未绑定到 Claude Code\n\n请在 **claude-history** 桌面应用中点击「绑定到飞书」按钮'));
       return;
     }
-    if (this._processing) {
-      await this._sendCard(chatId, buildWarningCard('⏳ 请稍候', '正在处理上一条消息，请等待完成后再发送新消息'));
-      return;
-    }
 
-    this._processing = true;
-    this._notifyRenderer('feishu:statusChanged', { processing: true });
-    const preview = messageText.length > 30 ? messageText.slice(0, 30) + '...' : messageText;
+    // H8: serialize through _withProcessing (replaces manual _processing toggling).
+    await this._withProcessing(chatId, async () => {
+      const preview = messageText.length > 30 ? messageText.slice(0, 30) + '...' : messageText;
+      let reactionId = null;
+      try {
+        if (this._confirmMode) {
+          const approved = await this._requestConfirmation(chatId, preview);
+          if (!approved) return;
+        } else {
+          reactionId = await this._addReaction(msg.messageId, 'Typing');
+        }
 
-    let reactionId = null;
-    try {
-      if (this._confirmMode) {
-        const approved = await this._requestConfirmation(chatId, preview);
-        if (!approved) return;
-      } else {
-        reactionId = await this._addReaction(msg.messageId, 'Typing');
+        const response = await this._doSpawnClaude({ sessionId: binding.session_id, jsonlPath: binding.jsonl_path, message: messageText, chatId });
+        this._touchConversation(binding.jsonl_path);
+
+        if (reactionId) this._deleteReaction(msg.messageId, reactionId).catch(() => {});
+
+        await this._sendCard(chatId, buildResponseCard(response));
+        this._lastMessage = messageText;
+        this._notifyRenderer('feishu:jsonlChanged', { jsonlPath: binding.jsonl_path, sessionId: binding.session_id });
+      } catch (err) {
+        if (reactionId) this._deleteReaction(msg.messageId, reactionId).catch(() => {});
+        await this._sendCard(chatId, buildErrorCard(err.message)).catch(() => {});
       }
-
-      const response = await this._doSpawnClaude({ sessionId: binding.session_id, jsonlPath: binding.jsonl_path, message: messageText, chatId });
-      this._touchConversation(binding.jsonl_path);
-
-      // Send card immediately, delete reaction in background
-      if (reactionId) this._deleteReaction(msg.messageId, reactionId).catch(() => {});
-
-      await this._sendCard(chatId, buildResponseCard(response));
-      this._lastMessage = messageText;
-      this._notifyRenderer('feishu:jsonlChanged', { jsonlPath: binding.jsonl_path, sessionId: binding.session_id });
-    } catch (err) {
-      if (reactionId) this._deleteReaction(msg.messageId, reactionId).catch(() => {});
-      await this._sendCard(chatId, buildErrorCard(err.message)).catch(() => {});
-    } finally {
-      this._processing = false;
-      this._notifyRenderer('feishu:statusChanged', { processing: false });
-    }
+    });
   }
 
   _doSpawnClaude({ sessionId, jsonlPath, message, chatId }) {
     const hookPort = this._hooksHandler.port;
+    const hookToken = this._hooksHandler.authToken;
     const self = this;
     return spawnClaude({
       sessionId, jsonlPath, message,
       model: self._model,
-      hookPort,
+      hookPort, hookToken,
+      permissionMode: self._permissions.mode,
+      onSpawn: (child) => {
+        // C3: keep the real child so /cancel & terminate actually kill it.
+        self._claudeProcess = child;
+        child.on('close', () => { if (self._claudeProcess === child) self._claudeProcess = null; });
+      },
       onToolUse: () => {} // Real-time notification handled by hooks system
     });
+  }
+
+  // H8: single serialized entry point for any spawn path. The check+set is
+  // synchronous so two messages cannot both pass the guard while awaiting IO.
+  async _withProcessing(chatId, fn) {
+    if (this._processing) {
+      await this._sendCard(chatId, buildWarningCard('⏳ 请稍候', '正在处理上一条消息，请等待完成后再发送新消息'));
+      return null;
+    }
+    this._processing = true;
+    this._notifyRenderer('feishu:statusChanged', { processing: true });
+    try {
+      return await fn();
+    } finally {
+      this._processing = false;
+      this._notifyRenderer('feishu:statusChanged', { processing: false });
+    }
   }
 
   // ── Card Action Handling ──
@@ -230,12 +256,11 @@ class FeishuBridge {
   async _handleCardAction(data) {
     const value = data?.action?.value;
     const messageId = data?.context?.open_message_id || data?.open_message_id;
-    if (!value || !value.requestId) return;
+    if (!value || !value.requestId) return false;
 
     // New hooks-based permission confirmation
     if (value.action?.startsWith('hook_')) {
-      this._hooksHandler.handleCardAction(value);
-      return;
+      return this._hooksHandler.handleCardAction(value);
     }
 
     // Legacy confirm mode
@@ -247,8 +272,9 @@ class FeishuBridge {
           ? buildConfirmResultCard('✅ 已批准，正在处理...', 'green', entry.detail)
           : buildConfirmResultCard('❌ 已拒绝', 'red', entry.detail);
         this._updateCard(messageId, card).catch(() => {});
+        return true;
       }
-      return;
+      return false;
     }
 
     // Legacy tool notification actions
@@ -256,12 +282,19 @@ class FeishuBridge {
       this._terminatedByUser = true;
       this._killClaudeProcess('SIGTERM');
       await this._updateCard(messageId, buildConfirmResultCard('🛑 已终止执行', 'red'));
-      return;
+      return true;
     }
-    if (value.action === 'always_allow' && value.toolName) {
-      this._permissions.alwaysAllow(value.toolName);
-      await this._updateCard(messageId, buildConfirmResultCard(`🔓 已始终允许 ${value.toolName}`, 'green'));
+    if (value.action === 'always_allow') {
+      // H9: whitelist toolName — never let a forged button grant arbitrary tools.
+      const { SENSITIVE_TOOLS } = require('./permissions');
+      if (value.toolName && SENSITIVE_TOOLS.includes(value.toolName)) {
+        this._permissions.alwaysAllow(value.toolName);
+        await this._updateCard(messageId, buildConfirmResultCard(`🔓 已始终允许 ${value.toolName}`, 'green'));
+        return true;
+      }
+      return false;
     }
+    return false;
   }
 
   // ── Pre-execution Confirmation (confirm mode) ──
@@ -355,7 +388,11 @@ class FeishuBridge {
       text = typeof parsed === 'string' ? parsed : parsed.text || msg.content || '';
     } catch { text = msg.content || ''; }
     text = text.replace(/^@\S+\s*/, '').trim();
-    return { chatId: msg.chat_id, chatType: msg.chat_type || 'p2p', content: text, text, messageId: msg.message_id };
+    // C2: capture sender identity for allowlist enforcement.
+    const senderOpenId = event?.sender?.sender_id?.open_id
+      || event?.event?.sender?.sender_id?.open_id
+      || '';
+    return { chatId: msg.chat_id, chatType: msg.chat_type || 'p2p', content: text, text, messageId: msg.message_id, senderOpenId };
   }
 
   _killClaudeProcess(signal = 'SIGTERM') {

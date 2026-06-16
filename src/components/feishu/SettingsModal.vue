@@ -31,6 +31,20 @@
               </button>
             </div>
 
+            <!-- C2: Sender allowlist -->
+            <div class="form-section">
+              <label class="form-label">允许的用户白名单</label>
+              <p class="form-hint">
+                填写允许使用机器人的飞书用户 open_id（每行一个，以 <code>ou_</code> 开头）。
+                <strong>留空 = 允许所有人</strong>。为防止群里任意成员远程触发命令，强烈建议填写。
+              </p>
+              <textarea v-model="allowedUsersText" class="form-input form-textarea" rows="3"
+                placeholder="ou_xxxxxxxxxxxx&#10;ou_yyyyyyyyyyyy"></textarea>
+              <button class="btn btn-primary" @click="saveAllowedUsers" :disabled="feishuStore.loading">
+                保存白名单
+              </button>
+            </div>
+
             <!-- Connection toggle -->
             <div class="toggle-section" v-if="feishuStore.config.hasSecret">
               <span>飞书桥接</span>
@@ -88,10 +102,12 @@ defineEmits(['close']);
 const feishuStore = useFeishuStore();
 const appId = ref('');
 const appSecret = ref('');
+const allowedUsersText = ref('');
 
 onMounted(async () => {
   await feishuStore.detect();
   appId.value = feishuStore.config.appId || '';
+  allowedUsersText.value = (feishuStore.allowedUsers || []).join('\n');
 });
 
 async function saveConfig() {
@@ -101,6 +117,11 @@ async function saveConfig() {
   if (result.success) {
     appSecret.value = '';
   }
+}
+
+async function saveAllowedUsers() {
+  const list = allowedUsersText.value.split('\n').map((s) => s.trim()).filter(Boolean);
+  await feishuStore.saveAllowedUsers(list);
 }
 
 async function toggleConnection() {
@@ -163,6 +184,12 @@ async function unbind() {
   font-size: 14px; box-sizing: border-box;
 }
 .form-input:focus { outline: none; border-color: #4a9eff; }
+.form-textarea { resize: vertical; font-family: inherit; min-height: 64px; }
+.form-hint {
+  font-size: 12px; color: var(--text-secondary, #888); line-height: 1.5;
+  margin: 4px 0 8px;
+}
+.form-hint code { background: var(--bg-primary, #1e1e1e); padding: 1px 5px; border-radius: 3px; font-size: 11px; }
 
 .toggle-section {
   display: flex; justify-content: space-between; align-items: center;

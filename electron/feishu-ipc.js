@@ -35,6 +35,25 @@ function registerFeishuIpc(ipcMain, bridge, store) {
     }
   });
 
+  // 3b. feishu:getAllowedUsers — Sender allowlist (C2). Empty = allow everyone.
+  ipcMain.handle('feishu:getAllowedUsers', async () => {
+    try {
+      return { success: true, allowedUsers: store.getAllowedUsers() };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  // 3c. feishu:setAllowedUsers — Replace the sender allowlist.
+  ipcMain.handle('feishu:setAllowedUsers', async (_, users) => {
+    try {
+      store.setAllowedUsers(Array.isArray(users) ? users : []);
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
   // 4. feishu:start — Start WebSocket connection
   ipcMain.handle('feishu:start', async () => {
     try {

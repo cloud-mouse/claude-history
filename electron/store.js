@@ -68,6 +68,14 @@ class Store {
     } catch (e) {
       // Ignore if already dropped
     }
+
+    // Migration: add allowed_users column to feishu_config (sender allowlist for C2).
+    // Empty = allow everyone (backward-compatible). Non-empty = only listed open_ids.
+    try {
+      this.db.exec(`ALTER TABLE feishu_config ADD COLUMN allowed_users TEXT NOT NULL DEFAULT ''`);
+    } catch (e) {
+      // Column already exists — ignore
+    }
   }
 
   upsertProject(name, projectPath) {
@@ -187,7 +195,7 @@ class Store {
 
   getFeishuConfig() {
     const row = this.db.prepare('SELECT * FROM feishu_config WHERE id = 1').get();
-    if (!row) return { app_id: '', app_secret: '', enabled: 0 };
+    if (!row) return { app_id: '', app_secret: '', enabled: 0, allowed_users: '' };
     // Decrypt app_secret if encrypted
     if (row.app_secret && row.app_secret.startsWith('ENC:') && this._safeStorage) {
       try {
@@ -238,6 +246,37 @@ class Store {
     this.db.prepare(`
       UPDATE feishu_config SET enabled = ?, updated_at = ? WHERE id = 1
     `).run(enabled ? 1 : 0, now);
+  }
+
+  // ── Feishu sender allowlist (C2) ──────────────────────────────
+
+  /**
+   * Allowed Feishu sender open_ids. Empty array = allow everyone.
+   * @returns {string[]}
+   */
+  getAllowedUsers() {
+    const row = this.db.prepare('SELECT allowed_users FROM feishu_config WHERE id = 1').get();
+    if (!row || !row.allowed_users) return [];
+    return row.allowed_users.split(',').map((s) => s.trim()).filter(Boolean);
+  }
+
+  /**
+   * Set the allowed Feishu sender open_ids.
+   * @param {string[]} users
+   */
+  setAllowedUsers(users) {
+    const now = Date.now();
+    const value = Array.isArray(users)
+      ? users.map((s) => String(s).trim()).filter(Boolean).join(',')
+      : '';
+    // Upsert config row so UPDATE succeeds even before credentials are saved.
+    this.db.prepare(`
+      INSERT INTO feishu_config (id, app_id, app_secret, enabled, allowed_users, updated_at)
+      VALUES (1, '', '', 0, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        allowed_users = excluded.allowed_users,
+        updated_at = excluded.updated_at
+    `).run(value, now);
   }
 
   // ── Feishu bindings ────────────────────────────────────────────

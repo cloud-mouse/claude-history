@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   feishuGetStatus: () => ipcRenderer.invoke('feishu:getStatus'),
   feishuGetConfig: () => ipcRenderer.invoke('feishu:getConfig'),
   feishuSaveConfig: (config) => ipcRenderer.invoke('feishu:saveConfig', config),
+  feishuGetAllowedUsers: () => ipcRenderer.invoke('feishu:getAllowedUsers'),
+  feishuSetAllowedUsers: (users) => ipcRenderer.invoke('feishu:setAllowedUsers', users),
   feishuStart: () => ipcRenderer.invoke('feishu:start'),
   feishuStop: () => ipcRenderer.invoke('feishu:stop'),
   feishuBindSession: (opts) => ipcRenderer.invoke('feishu:bindSession', opts),

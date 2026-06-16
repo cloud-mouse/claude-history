@@ -143,9 +143,9 @@ async function cmdCancel(ctx) {
     await ctx.sendCard(ctx.chatId, buildInfoCard('ℹ️ 无任务', '当前没有正在处理的任务', 'grey'));
     return;
   }
+  // Kill the real child (C3). _processing is released by _withProcessing's
+  // finally once the spawn promise rejects — do not reset it manually here.
   ctx.killClaude();
-  ctx.setProcessing(false);
-  ctx.notifyRenderer('feishu:statusChanged', { processing: false });
   await ctx.sendCard(ctx.chatId, buildSuccessCard('✅ 已取消', '当前任务已被终止'));
 }
 
@@ -273,17 +273,16 @@ async function cmdRepeat(ctx) {
   if (!lastMessage) { await ctx.sendCard(chatId, buildInfoCard('📭 无消息', '没有上一条消息可重复', 'grey')); return; }
   if (ctx.getProcessing()) { await ctx.sendCard(chatId, buildWarningCard('⏳ 处理中', '正在处理中，请先 /cancel')); return; }
   await ctx.sendCard(chatId, buildAckCard(lastMessage.slice(0, 30) + ' (重复)'));
-  ctx.setProcessing(true);
-  ctx.notifyRenderer('feishu:statusChanged', { processing: true });
-  try {
-    const currentBinding = store.getBindingByChatId(chatId);
-    if (!currentBinding) throw new Error('绑定已失效');
-    const { buildResponseCard } = require('./cards');
-    const response = await ctx.spawnClaude({ sessionId: currentBinding.session_id, jsonlPath: currentBinding.jsonl_path, message: lastMessage, chatId });
-    await ctx.sendCard(chatId, buildResponseCard(response));
-    ctx.notifyRenderer('feishu:jsonlChanged', { jsonlPath: currentBinding.jsonl_path, sessionId: currentBinding.session_id });
-  } catch (err) { await ctx.sendCard(chatId, buildErrorCard(err.message)).catch(() => {}); }
-  finally { ctx.setProcessing(false); ctx.notifyRenderer('feishu:statusChanged', { processing: false }); }
+  await ctx.withProcessing(async () => {
+    try {
+      const currentBinding = store.getBindingByChatId(chatId);
+      if (!currentBinding) throw new Error('绑定已失效');
+      const { buildResponseCard } = require('./cards');
+      const response = await ctx.spawnClaude({ sessionId: currentBinding.session_id, jsonlPath: currentBinding.jsonl_path, message: lastMessage, chatId });
+      await ctx.sendCard(chatId, buildResponseCard(response));
+      ctx.notifyRenderer('feishu:jsonlChanged', { jsonlPath: currentBinding.jsonl_path, sessionId: currentBinding.session_id });
+    } catch (err) { await ctx.sendCard(chatId, buildErrorCard(err.message)).catch(() => {}); }
+  });
 }
 
 async function cmdSystem(ctx) {
@@ -292,18 +291,17 @@ async function cmdSystem(ctx) {
   if (!await requireBinding(ctx)) return;
   if (!args) { await ctx.sendCard(chatId, buildWarningCard('❌ 缺少参数', '请输入系统提示内容\n例: `/system 你是一个专业的代码审查助手`')); return; }
   if (ctx.getProcessing()) { await ctx.sendCard(chatId, buildWarningCard('⏳ 处理中', '正在处理中，请先 /cancel')); return; }
-  ctx.setProcessing(true);
-  ctx.notifyRenderer('feishu:statusChanged', { processing: true });
   await ctx.sendCard(chatId, buildAckCard(args.slice(0, 50)));
-  try {
-    const currentBinding = store.getBindingByChatId(chatId);
-    if (!currentBinding) throw new Error('绑定已失效');
-    const { buildResponseCard } = require('./cards');
-    const response = await ctx.spawnClaude({ sessionId: currentBinding.session_id, jsonlPath: currentBinding.jsonl_path, message: `[System Instruction] ${args}`, chatId });
-    await ctx.sendCard(chatId, buildResponseCard(response));
-    ctx.notifyRenderer('feishu:jsonlChanged', { jsonlPath: currentBinding.jsonl_path, sessionId: currentBinding.session_id });
-  } catch (err) { await ctx.sendCard(chatId, buildErrorCard(err.message)).catch(() => {}); }
-  finally { ctx.setProcessing(false); ctx.notifyRenderer('feishu:statusChanged', { processing: false }); }
+  await ctx.withProcessing(async () => {
+    try {
+      const currentBinding = store.getBindingByChatId(chatId);
+      if (!currentBinding) throw new Error('绑定已失效');
+      const { buildResponseCard } = require('./cards');
+      const response = await ctx.spawnClaude({ sessionId: currentBinding.session_id, jsonlPath: currentBinding.jsonl_path, message: `[System Instruction] ${args}`, chatId });
+      await ctx.sendCard(chatId, buildResponseCard(response));
+      ctx.notifyRenderer('feishu:jsonlChanged', { jsonlPath: currentBinding.jsonl_path, sessionId: currentBinding.session_id });
+    } catch (err) { await ctx.sendCard(chatId, buildErrorCard(err.message)).catch(() => {}); }
+  });
 }
 
 async function cmdConfirm(ctx) {

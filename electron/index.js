@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, safeStorage } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, safeStorage, session, shell } = require('electron');
 const path = require('path');
 const { registerIpcHandlers } = require('./ipc-handlers');
 const { registerFeishuIpc } = require('./feishu-ipc');
@@ -22,11 +22,38 @@ function createWindow() {
     }
   });
 
+  // H4: defense-in-depth against phishing/navigation hijacking. Any external
+  // http(s) link opened from rendered markdown is handed to the OS browser;
+  // the app window itself never navigates off-file://.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (/^https?:\/\//i.test(url)) {
+      event.preventDefault();
+      shell.openExternal(url);
+    }
+  });
+
   const isDev = !app.isPackaged;
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
   } else {
+    // H4: inject a Content-Security-Policy in production so a future sanitize
+    // bypass still cannot execute arbitrary scripts. (Skipped in dev so Vite
+    // HMR / inline scripts keep working.)
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [
+            "default-src 'self'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self' data:"
+          ]
+        }
+      });
+    });
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 

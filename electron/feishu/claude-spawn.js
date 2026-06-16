@@ -3,7 +3,16 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 const { execSync, spawn } = require('child_process');
+
+// Claude permission modes mapped from our internal PermissionManager modes.
+// Only an explicit "bypass" lets Claude run fully unattended; everything else
+// uses "default" so Claude itself is a fail-closed backstop and the PreToolUse
+// hook is the authority that returns allow decisions.
+function toClaudePermissionMode(mode) {
+  return mode === 'bypass' ? 'bypassPermissions' : 'default';
+}
 
 let _cachedShellPath = null;
 function resolveShellPath() {
@@ -43,33 +52,42 @@ function resolveClaudeBinary() {
   return 'claude';
 }
 
-function generateHookSettings(hookPort) {
+function generateHookSettings(hookPort, hookToken) {
   const hookScriptPath = path.join(__dirname, '..', 'feishu-hook-script.js');
   const settings = {
     hooks: {
       PreToolUse: [{
         matcher: 'Bash|Write|Edit|MultiEdit',
-        hooks: [{ type: 'command', command: `FEISHU_HOOK_PORT=${hookPort} node ${hookScriptPath}`, timeout: 60 }]
+        hooks: [{ type: 'command', command: `FEISHU_HOOK_PORT=${hookPort} FEISHU_HOOK_TOKEN=${hookToken} node ${hookScriptPath}`, timeout: 60 }]
       }]
     }
   };
-  const tmpDir = os.tmpdir();
-  const settingsPath = path.join(tmpDir, `feishu-hook-settings-${Date.now()}.json`);
-  fs.writeFileSync(settingsPath, JSON.stringify(settings), 'utf-8');
+  // Write into a private, 0o600 dir under the user's home (NOT the world-writable
+  // system tmpdir) and use a random filename to prevent TOCTOU/symlink swaps.
+  const privateDir = path.join(os.homedir(), '.claude-history');
+  try { fs.mkdirSync(privateDir, { recursive: true, mode: 0o700 }); } catch {}
+  const settingsPath = path.join(privateDir, `hook-settings-${crypto.randomUUID()}.json`);
+  // Restrictive perms (best-effort; the dir is already 0700).
+  const fd = fs.openSync(settingsPath, 'w', 0o600);
+  fs.writeFileSync(fd, JSON.stringify(settings), 'utf-8');
+  fs.closeSync(fd);
   return settingsPath;
 }
 
 /**
  * Spawn Claude Code CLI with streaming output and hook configuration.
+ * @param {object} opts
+ * @param {string} opts.permissionMode - internal PermissionManager mode (default|plan|acceptEdits|bypass)
+ * @param {Function} [opts.onSpawn] - invoked with the child process so the caller can store/kill it
  */
-function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, onToolUse }) {
+function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, hookToken, permissionMode, onSpawn, onToolUse }) {
   return new Promise((resolve, reject) => {
-    const args = ['-p', message, '--output-format', 'stream-json', '--verbose', '--permission-mode', 'bypassPermissions'];
+    const args = ['-p', message, '--output-format', 'stream-json', '--verbose', '--permission-mode', toClaudePermissionMode(permissionMode)];
     if (model) args.push('--model', model);
 
     let settingsPath = null;
-    if (hookPort) {
-      settingsPath = generateHookSettings(hookPort);
+    if (hookPort && hookToken) {
+      settingsPath = generateHookSettings(hookPort, hookToken);
       args.push('--settings', settingsPath);
     }
 
@@ -78,13 +96,17 @@ function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, onToolUse
     if (fs.existsSync(jsonlPath)) args.push('--resume', sessionId);
 
     const claudeBin = resolveClaudeBinary();
-    console.log(`[feishu:spawn] ${claudeBin} ${args.join(' ')} in ${cwd || 'default cwd'}`);
+    // Log without the user message / token to avoid leaking sensitive content.
+    console.log(`[feishu:spawn] ${claudeBin} (mode=${toClaudePermissionMode(permissionMode)}, ${args.length} args) in ${cwd || 'default cwd'}`);
 
     const child = spawn(claudeBin, args, {
       cwd: cwd || undefined,
       env: { ...process.env, PATH: resolveShellPath() },
       stdio: ['pipe', 'pipe', 'pipe']
     });
+
+    // C3: surface the child so the bridge can actually kill it on /cancel.
+    if (typeof onSpawn === 'function') onSpawn(child);
 
     child.stdin.end();
 

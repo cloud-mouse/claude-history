@@ -1,7 +1,7 @@
 'use strict';
 
 const { ipcMain, shell } = require('electron');
-const { exec } = require('child_process');
+const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -16,6 +16,20 @@ const { extractTitleFromJsonl } = require('./title-extractor');
 let _store = null;
 function getHomeDir() {
   return process.env.HOME || process.env.USERPROFILE || os.homedir();
+}
+
+// ── H1: path-safety helpers ───────────────────────────────────
+// Every destructive/opener IPC handler must constrain its target to the
+// ~/.claude/projects tree so a compromised renderer cannot reach arbitrary
+// filesystem locations.
+function getProjectsDir() {
+  return path.join(getHomeDir(), '.claude', 'projects');
+}
+
+function isWithinProjectsDir(targetPath) {
+  const root = path.resolve(getProjectsDir());
+  const resolved = path.resolve(targetPath);
+  return resolved === root || resolved.startsWith(root + path.sep);
 }
 
 function getStore() {
@@ -231,13 +245,18 @@ function registerIpcHandlers() {
     }
   });
 
-  // 6. open-external — Open file path externally via shell
+  // 6. open-external — Open a path's containing folder in the OS file manager.
+  // H1: constrained to ~/.claude/projects to prevent opening arbitrary files.
   ipcMain.handle('open-external', async (_, filePath) => {
     try {
-      await shell.openPath(filePath);
+      if (!filePath || !isWithinProjectsDir(filePath)) {
+        return { success: false, error: '路径不在允许范围内' };
+      }
+      // Reveal in Finder/Explorer rather than executing arbitrary files.
+      shell.showItemInFolder(path.resolve(filePath));
       return { success: true };
     } catch (err) {
-      console.error('[ipc-handlers] open-external error:', err);
+      console.error('[ipc-handlers] open-external error:', err.message);
       return { success: false, error: err.message };
     }
   });
@@ -245,6 +264,10 @@ function registerIpcHandlers() {
   // 7. delete-conversation — Delete conversation file and SQLite record
   ipcMain.handle('delete-conversation', async (_, filePath) => {
     try {
+      // H1: only allow deleting .jsonl files inside the projects tree.
+      if (!filePath || !filePath.endsWith('.jsonl') || !isWithinProjectsDir(filePath)) {
+        return { success: false, error: '无效的会话路径' };
+      }
       // Delete the actual .jsonl file from disk
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
@@ -256,7 +279,7 @@ function registerIpcHandlers() {
       store.deleteConversation(filePath);
       return { success: true };
     } catch (err) {
-      console.error('[ipc-handlers] delete-conversation error:', err);
+      console.error('[ipc-handlers] delete-conversation error:', err.message);
       return { success: false, error: err.message };
     }
   });
@@ -265,9 +288,24 @@ function registerIpcHandlers() {
   ipcMain.handle('delete-project', async (_, projectId) => {
     try {
       const store = getStore();
-      // projectId is actually the folder name (e.g., "-Users-edy-my-space-claude-history")
+      // projectId is the folder name (e.g., "-Users-edy-my-space-claude-history").
       const projectsDir = path.join(getHomeDir(), '.claude', 'projects');
-      const projectPath = path.join(projectsDir, projectId);
+
+      // H1: projectId must be a bare folder name — reject path separators
+      // and traversal segments outright, then confirm the resolved path is
+      // strictly inside the projects root.
+      if (!projectId
+        || projectId.includes('/') || projectId.includes('\\')
+      || projectId.includes(path.sep)
+      || projectId.includes('..')
+      || projectId === '.'
+      || projectId === '..') {
+        return { success: false, error: '无效的项目 ID' };
+      }
+      const projectPath = path.resolve(projectsDir, projectId);
+      if (projectPath === path.resolve(projectsDir) || !isWithinProjectsDir(projectPath)) {
+        return { success: false, error: '无效的项目路径' };
+      }
 
       // Delete the actual project folder from disk
       if (fs.existsSync(projectPath)) {
@@ -288,42 +326,49 @@ function registerIpcHandlers() {
       }
       return { success: true };
     } catch (err) {
-      console.error('[ipc-handlers] delete-project error:', err);
+      console.error('[ipc-handlers] delete-project error:', err.message);
       return { success: false, error: err.message };
     }
   });
 
-  // 9. resume-conversation — Open terminal with claude --resume command
+  // 9. resume-conversation — Open terminal with `claude --resume <sessionId>`
+  // H2: never shell-concatenate untrusted paths. The sessionId is whitelisted
+  // to UUID-style chars and the workdir is validated + shell-escaped per
+  // platform; the command is launched via spawn (argv), not exec(string).
   ipcMain.handle('resume-conversation', async (_, filePath, projectDir) => {
     try {
       const fileName = path.basename(filePath, '.jsonl');
-      const workDir = projectDir || path.dirname(filePath);
-      const command = `claude --resume ${fileName}`;
-
-      // Detect platform and open terminal with command
-      const isMac = process.platform === 'darwin';
-      const isLinux = process.platform === 'linux';
-
-      let terminalCommand;
-      if (isMac) {
-        terminalCommand = `osascript -e 'tell app "Terminal" to do script "cd ${workDir.replace(/'/g, "'\\''")} && ${command}"'`;
-      } else if (isLinux) {
-        // Try common terminal emulators
-        terminalCommand = `bash -c 'cd "${workDir}" && ${command}; exec bash' &`;
-      } else {
-        // Windows - use cmd
-        terminalCommand = `start cmd /k "cd /d ${workDir} && ${command}"`;
+      // sessionId is a UUID; reject anything containing shell/quote metacharacters.
+      if (!/^[A-Za-z0-9_-]+$/.test(fileName)) {
+        return { success: false, error: '无效的会话标识' };
+      }
+      const workDir = path.resolve(projectDir || path.dirname(filePath));
+      if (!fs.existsSync(workDir) || !fs.statSync(workDir).isDirectory()) {
+        return { success: false, error: '无效的工作目录' };
       }
 
-      exec(terminalCommand, (err) => {
-        if (err) {
-          console.error('[ipc-handlers] Failed to open terminal:', err);
-        }
-      });
+      const claudeCmd = `claude --resume ${fileName}`; // fileName whitelisted above
+
+      if (process.platform === 'darwin') {
+        // Escape " and \ for the AppleScript string literal; single-quotes are
+        // safe inside an AppleScript double-quoted string.
+        const escDir = workDir.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        const script = `tell application "Terminal"\nactivate\ndo script "cd \\"${escDir}\\" && ${claudeCmd}"\nend tell`;
+        spawn('osascript', ['-e', script], { detached: true, stdio: 'ignore' }).unref();
+      } else if (process.platform === 'linux') {
+        // Wrap workDir in single quotes for bash; escape embedded single-quotes.
+        const bashSafe = workDir.replace(/'/g, `'\\''`);
+        spawn('bash', ['-c', `cd '${bashSafe}' && ${claudeCmd}; exec bash`], { detached: true, stdio: 'ignore' }).unref();
+      } else {
+        // Windows: use cmd /c start. workDir is double-quoted; escape embedded
+        // quotes. fileName is already whitelisted so it can't break out.
+        const winDir = workDir.replace(/"/g, '\\"');
+        spawn('cmd', ['/d', '/s', '/c', 'start', 'cmd', '/k', `cd /d "${winDir}" && ${claudeCmd}`], { detached: true, stdio: 'ignore', windowsVerbatimArguments: true }).unref();
+      }
 
       return { success: true };
     } catch (err) {
-      console.error('[ipc-handlers] resume-conversation error:', err);
+      console.error('[ipc-handlers] resume-conversation error:', err.message);
       return { success: false, error: err.message };
     }
   });
