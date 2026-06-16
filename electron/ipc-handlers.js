@@ -148,6 +148,79 @@ function registerIpcHandlers() {
     return { success: true };
   });
 
+  // refresh-index — re-aggregate stats + rebuild FTS for one conversation.
+  // Idempotent; used for incremental updates after a JSONL changes.
+  ipcMain.handle('refresh-index', async (_, filePath) => {
+    try {
+      const store = getStore();
+      const conv = store.getConversationByFilePath(filePath);
+      if (!conv) return { success: false, error: '会话不存在' };
+      const { backfillConversation } = require('./backfill');
+      await backfillConversation(store, conv);
+      return { success: true };
+    } catch (err) {
+      console.error('[ipc-handlers] refresh-index error:', err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
+  // search-fulltext — full-text search across all conversations (function 1).
+  // Optional projectId scopes results to one project.
+  ipcMain.handle('search-fulltext', async (_, query, projectId) => {
+    try {
+      const store = getStore();
+      const hits = store.searchMessages(query, 50);
+      const convCache = new Map();
+      const results = [];
+      for (const h of hits) {
+        let conv = convCache.get(h.conversation_id);
+        if (!conv) {
+          conv = store.getConversationById(h.conversation_id);
+          if (conv) convCache.set(h.conversation_id, conv);
+        }
+        if (!conv) continue;
+        if (projectId != null && conv.project_id !== projectId) continue;
+        const project = store.getProjectById(conv.project_id);
+        results.push({
+          convId: conv.id,
+          messageId: h.message_id,
+          role: h.role,
+          preview: h.preview || '',
+          filePath: conv.file_path,
+          convTitle: conv.title,
+          updatedAt: conv.updated_at,
+          projectId: conv.project_id,
+          projectName: project ? project.name : '',
+          projectPath: project ? project.path : ''
+        });
+      }
+      return { success: true, results };
+    } catch (err) {
+      console.error('[ipc-handlers] search-fulltext error:', err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
+  // stats:get-overview — aggregate token/cost stats for the dashboard (function 3).
+  ipcMain.handle('stats:get-overview', async () => {
+    try {
+      const store = getStore();
+      const overview = store.getStatsOverview();
+      return {
+        success: true,
+        data: {
+          totals: overview.totals,
+          byProject: overview.byProject,
+          byDay: store.getStatsByDay(30),
+          byModel: store.getStatsByModel()
+        }
+      };
+    } catch (err) {
+      console.error('[ipc-handlers] stats:get-overview error:', err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
   // 2. get-conversations — Get conversations for a project from SQLite
   ipcMain.handle('get-conversations', async (_, projectId) => {
     try {

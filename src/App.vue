@@ -42,6 +42,19 @@
       >
         <div class="panel-header-actions">
           <UpdateNotification />
+          <button class="settings-btn" @click="showSearch = true" title="全文搜索 (Ctrl/Cmd+Shift+F)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </button>
+          <button class="settings-btn" @click="showStats = true" title="使用统计">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="20" x2="18" y2="10"></line>
+              <line x1="12" y1="20" x2="12" y2="4"></line>
+              <line x1="6" y1="20" x2="6" y2="14"></line>
+            </svg>
+          </button>
           <button class="settings-btn" @click="showSettings = true" title="设置"
             :class="{ connected: feishuStore.connected }">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -87,6 +100,8 @@
     </div>
 
     <SettingsModal :show="showSettings" @close="showSettings = false" />
+    <StatsModal :show="showStats" @close="showStats = false" />
+    <SearchOverlay :show="showSearch" @close="showSearch = false" @select="handleSearchSelect" />
   </div>
 </template>
 
@@ -100,6 +115,8 @@ import ConversationList from './components/layout/ConversationList.vue';
 import MessageThread from './components/layout/MessageThread.vue';
 import ThemeSelector from './components/common/ThemeSelector.vue';
 import SettingsModal from './components/feishu/SettingsModal.vue';
+import StatsModal from './components/stats/StatsModal.vue';
+import SearchOverlay from './components/search/SearchOverlay.vue';
 import UpdateNotification from './components/common/UpdateNotification.vue';
 import { useFeishuStore } from './stores/feishu';
 import { useUpdaterStore } from './stores/updater';
@@ -111,6 +128,8 @@ const feishuStore = useFeishuStore();
 const updaterStore = useUpdaterStore();
 
 const showSettings = ref(false);
+const showStats = ref(false);
+const showSearch = ref(false);
 
 const leftPanelWidth = ref(240);
 const middlePanelWidth = ref(300);
@@ -129,6 +148,13 @@ function handleProjectSelect(projectId) {
 
 function handleConversationSelect(conv) {
   conversationsStore.openConversation(conv);
+}
+
+// Open a conversation jumped to from full-text search, focusing the matched message.
+function handleSearchSelect({ projectId, messageId, conv }) {
+  showSearch.value = false;
+  if (projectId != null) projectsStore.selectProject(projectId);
+  conversationsStore.openConversation(conv, false, messageId);
 }
 
 async function handleRefresh() {
@@ -217,8 +243,10 @@ onMounted(() => {
       // Debounce reload of active conversation
       if (conversationsStore.activeConversation?.filePath === data.jsonlPath) {
         clearTimeout(_reloadDebounce);
-        _reloadDebounce = setTimeout(() => {
-          conversationsStore.reloadByFilePath(data.jsonlPath);
+        _reloadDebounce = setTimeout(async () => {
+          await conversationsStore.reloadByFilePath(data.jsonlPath);
+          // Re-aggregate token stats incrementally after the JSONL changed.
+          window.electronAPI.refreshIndex(data.jsonlPath);
         }, 500);
       }
       // Debounce conversation list refresh (Claude writes JSONL multiple times)
@@ -241,6 +269,17 @@ onMounted(() => {
     window.electronAPI.onUpdaterDownloaded((info) => updaterStore.handleDownloaded(info)),
     window.electronAPI.onUpdaterError((err) => updaterStore.handleError(err))
   );
+
+  // Global shortcut: Cmd/Ctrl+Shift+F opens full-text search.
+  // (Cmd/Ctrl+K is already taken by the dev-tools menu item in index.js.)
+  const onKeydown = (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'f' || e.key === 'F')) {
+      e.preventDefault();
+      showSearch.value = true;
+    }
+  };
+  window.addEventListener('keydown', onKeydown);
+  _unsubs.push(() => window.removeEventListener('keydown', onKeydown));
 });
 
 onUnmounted(() => {

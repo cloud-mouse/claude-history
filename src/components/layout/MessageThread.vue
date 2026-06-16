@@ -69,6 +69,7 @@
               :role="message.role === 'tool_result' ? 'assistant' : message.role"
               :timestamp="message.timestamp"
               :source="remoteSession && message.role === 'user' ? 'feishu' : null"
+              :message-id="message.id"
               :ref="el => setBubbleRef(index, el)"
             />
             <PermissionBadge
@@ -84,6 +85,7 @@
               v-else-if="message.type === 'last-prompt'"
               :blocks="normalizeContent(message.message?.content)"
               role="user"
+              :message-id="message.id"
               :ref="el => setBubbleRef(index, el)"
             />
           </template>

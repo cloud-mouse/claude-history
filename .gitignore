@@ -13,7 +13,11 @@ npm-debug.log*
 
 # Local sensitive data and caches
 .claude/
-.superpowers/
+.agents/
+.codex/
+.cursor/
+.trellis/
+AGENTS.md
 
 # Lock files (use pnpm-lock.yaml instead)
 package-lock.json

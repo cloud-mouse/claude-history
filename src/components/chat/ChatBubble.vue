@@ -1,5 +1,5 @@
 <template>
-  <div v-if="hasVisibleContent" :class="['chat-bubble', role]">
+  <div v-if="hasVisibleContent" :id="messageId ? 'msg-' + messageId : undefined" :class="['chat-bubble', role]">
     <div class="bubble-header">
       <span class="avatar">
         <svg v-if="role === 'user'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -116,6 +116,10 @@ const props = defineProps({
     default: null
   },
   source: {
+    type: String,
+    default: null
+  },
+  messageId: {
     type: String,
     default: null
   }

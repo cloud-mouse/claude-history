@@ -76,6 +76,40 @@ class Store {
     } catch (e) {
       // Column already exists — ignore
     }
+
+    // Full-text search index over message text + tool calls (function 1).
+    // Self-contained FTS5 table (content lives here, not in an external table);
+    // trigram tokenizer gives good substring recall for CJK text and camelCase.
+    this.db.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+        text,
+        conversation_id UNINDEXED,
+        message_id UNINDEXED,
+        role UNINDEXED,
+        tokenize = 'trigram'
+      );
+    `);
+
+    // Migration: token/cost statistics columns on conversations (functions 1 & 3).
+    // Each ADD COLUMN is idempotent via try/catch (errors when the column exists).
+    for (const col of [
+      'stats_updated_at INTEGER NOT NULL DEFAULT 0',
+      'input_tokens INTEGER NOT NULL DEFAULT 0',
+      'output_tokens INTEGER NOT NULL DEFAULT 0',
+      'cache_read_tokens INTEGER NOT NULL DEFAULT 0',
+      'cache_creation_tokens INTEGER NOT NULL DEFAULT 0',
+      'assistant_turns INTEGER NOT NULL DEFAULT 0',
+      "models TEXT NOT NULL DEFAULT ''",
+      'last_cost_usd REAL',
+      'last_duration_ms INTEGER',
+      'last_run_at INTEGER'
+    ]) {
+      try {
+        this.db.exec(`ALTER TABLE conversations ADD COLUMN ${col}`);
+      } catch (e) {
+        // Column already exists — ignore
+      }
+    }
   }
 
   upsertProject(name, projectPath) {
@@ -156,17 +190,183 @@ class Store {
   }
 
   deleteConversation(filePath) {
+    const conv = this.getConversationByFilePath(filePath);
+    if (conv) this.clearFtsForConversation(conv.id);
     const stmt = this.db.prepare('DELETE FROM conversations WHERE file_path = ?');
     return stmt.run(filePath);
   }
 
   deleteProject(projectId) {
+    // Clean FTS index for the project's conversations first.
+    const convIds = this.db.prepare('SELECT id FROM conversations WHERE project_id = ?').all(projectId);
+    for (const c of convIds) this.clearFtsForConversation(c.id);
     // Delete associated conversations first (due to foreign key)
     const deleteConvs = this.db.prepare('DELETE FROM conversations WHERE project_id = ?');
     deleteConvs.run(projectId);
     // Then delete the project
     const deleteProj = this.db.prepare('DELETE FROM projects WHERE id = ?');
     return deleteProj.run(projectId);
+  }
+
+  // ── Full-text search index (function 1) ────────────────────────
+
+  /**
+   * Index a single message's searchable text. FTS5 has no primary key, so we
+   * delete-then-insert keyed by message_id to stay idempotent on re-indexing.
+   */
+  indexMessage(convId, messageId, role, text) {
+    if (!messageId) return;
+    this.db.prepare('DELETE FROM messages_fts WHERE message_id = ?').run(messageId);
+    const t = typeof text === 'string' ? text.trim() : '';
+    if (!t) return;
+    this.db.prepare(
+      'INSERT INTO messages_fts (text, conversation_id, message_id, role) VALUES (?, ?, ?, ?)'
+    ).run(t.slice(0, 50000), convId, messageId, role || '');
+  }
+
+  /** Remove all FTS rows belonging to a conversation (used on re-index / delete). */
+  clearFtsForConversation(convId) {
+    this.db.prepare('DELETE FROM messages_fts WHERE conversation_id = ?').run(convId);
+  }
+
+  /**
+   * Full-text search across all indexed messages.
+   * @returns {Array<{conversation_id, message_id, role, preview}>}
+   */
+  searchMessages(query, limit = 50) {
+    const q = String(query || '').trim();
+    if (!q) return [];
+    // The trigram tokenizer can't extract trigrams from queries shorter than 3
+    // characters, so 2-char CJK terms (e.g. "飞书") would miss entirely. Fall back
+    // to a LIKE scan for those — slower, but only triggered on very short queries.
+    if (q.length < 3) {
+      const like = '%' + q.replace(/[%_\\]/g, (m) => '\\' + m) + '%';
+      try {
+        return this.db.prepare(
+          `SELECT conversation_id, message_id, role, '' AS preview
+           FROM messages_fts WHERE text LIKE ? ESCAPE '\\' LIMIT ?`
+        ).all(like, limit);
+      } catch (e) {
+        console.warn('[store] searchMessages (LIKE) failed:', e.message);
+        return [];
+      }
+    }
+    // Wrap as an FTS5 phrase query so user input can't inject AND/OR/NOT/* operators.
+    const ftsQuery = '"' + q.replace(/"/g, '""') + '"';
+    try {
+      return this.db.prepare(
+        `SELECT conversation_id, message_id, role,
+                snippet(messages_fts, 0, '【', '】', '...', 24) AS preview
+         FROM messages_fts WHERE messages_fts MATCH ?
+         ORDER BY rank LIMIT ?`
+      ).all(ftsQuery, limit);
+    } catch (e) {
+      console.warn('[store] searchMessages failed:', e.message);
+      return [];
+    }
+  }
+
+  // ── Token / cost statistics (functions 1 & 3) ──────────────────
+
+  /** All conversations (used by the backfill engine to find candidates). */
+  getAllConversations() {
+    return this.db.prepare('SELECT * FROM conversations').all();
+  }
+
+  /**
+   * Overwrite a conversation's token stats. Written by the backfill engine
+   * (which re-aggregates the whole file), so this is a full replace.
+   */
+  updateTokens(convId, stats) {
+    this.db.prepare(
+      `UPDATE conversations SET
+         input_tokens = ?, output_tokens = ?, cache_read_tokens = ?,
+         cache_creation_tokens = ?, assistant_turns = ?, models = ?, stats_updated_at = ?
+       WHERE id = ?`
+    ).run(
+      stats.input || 0, stats.output || 0, stats.cacheRead || 0,
+      stats.cacheCreation || 0, stats.turns || 0,
+      Array.isArray(stats.models) ? stats.models.join(',') : (stats.models || ''),
+      stats.updatedAt || 0, convId
+    );
+  }
+
+  /**
+   * Record the most recent live-run cost/duration. USD cost is only available
+   * from the real-time result frame, so we store it per-conversation as "last run".
+   */
+  updateRuntime(convId, stats) {
+    const sets = [];
+    const values = [];
+    if (stats.costUsd != null) { sets.push('last_cost_usd = ?'); values.push(stats.costUsd); }
+    if (stats.durationMs != null) { sets.push('last_duration_ms = ?'); values.push(stats.durationMs); }
+    sets.push('last_run_at = ?'); values.push(stats.runAt || Date.now());
+    values.push(convId);
+    this.db.prepare(`UPDATE conversations SET ${sets.join(', ')} WHERE id = ?`).run(...values);
+  }
+
+  /** Aggregate stats: global totals + per-project breakdown. */
+  getStatsOverview() {
+    const totals = this.db.prepare(
+      `SELECT
+         COUNT(*) AS conversations,
+         COALESCE(SUM(input_tokens), 0) AS input_tokens,
+         COALESCE(SUM(output_tokens), 0) AS output_tokens,
+         COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
+         COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens,
+         COALESCE(SUM(assistant_turns), 0) AS assistant_turns,
+         COALESCE(SUM(last_cost_usd), 0) AS last_cost_total
+       FROM conversations`
+    ).get();
+
+    const byProject = this.db.prepare(
+      `SELECT p.id AS project_id, p.name AS project_name, p.path AS project_path,
+              COUNT(c.id) AS conversations,
+              COALESCE(SUM(c.input_tokens), 0) AS input_tokens,
+              COALESCE(SUM(c.output_tokens), 0) AS output_tokens,
+              COALESCE(SUM(c.cache_read_tokens), 0) AS cache_read_tokens,
+              COALESCE(SUM(c.cache_creation_tokens), 0) AS cache_creation_tokens,
+              COALESCE(SUM(c.assistant_turns), 0) AS assistant_turns,
+              COALESCE(SUM(c.last_cost_usd), 0) AS last_cost_total
+       FROM projects p
+       LEFT JOIN conversations c ON c.project_id = p.id
+       GROUP BY p.id
+       ORDER BY (COALESCE(SUM(c.input_tokens),0) + COALESCE(SUM(c.output_tokens),0)) DESC`
+    ).all();
+
+    return { totals, byProject };
+  }
+
+  /**
+   * Token usage grouped by day (based on each conversation's updated_at).
+   * Note: coarse-grained — a long-running session is bucketed by its last-updated day.
+   */
+  getStatsByDay(days = 30) {
+    return this.db.prepare(
+      `SELECT date(updated_at / 1000, 'unixepoch', 'localtime') AS day,
+              COUNT(*) AS conversations,
+              COALESCE(SUM(input_tokens), 0) AS input_tokens,
+              COALESCE(SUM(output_tokens), 0) AS output_tokens,
+              COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens
+       FROM conversations
+       WHERE stats_updated_at > 0
+       GROUP BY day
+       ORDER BY day DESC
+       LIMIT ?`
+    ).all(days);
+  }
+
+  /** Model usage by number of conversations that used each model. */
+  getStatsByModel() {
+    const rows = this.db.prepare("SELECT models FROM conversations WHERE models != ''").all();
+    const map = {};
+    for (const r of rows) {
+      for (const m of String(r.models).split(',').map(s => s.trim()).filter(Boolean)) {
+        if (!map[m]) map[m] = { model: m, conversations: 0 };
+        map[m].conversations += 1;
+      }
+    }
+    return Object.values(map).sort((a, b) => b.conversations - a.conversations);
   }
 
   /**

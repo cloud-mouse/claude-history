@@ -231,6 +231,18 @@ class FeishuBridge {
         child.on('close', () => { if (self._claudeProcess === child) self._claudeProcess = null; });
       },
       onToolUse: () => {} // Real-time notification handled by hooks system
+    }).then(({ text, meta }) => {
+      // Record live-run cost/duration. USD cost is only available from the
+      // real-time result frame, so it is stored per-conversation as "last run".
+      if (meta && (meta.costUsd != null || meta.durationMs != null)) {
+        try {
+          const conv = self.store.getConversationByFilePath(jsonlPath);
+          if (conv) self.store.updateRuntime(conv.id, {
+            costUsd: meta.costUsd, durationMs: meta.durationMs, runAt: Date.now()
+          });
+        } catch (err) { console.warn('[feishu] updateRuntime failed:', err.message); }
+      }
+      return text; // Backward-compatible: existing callers expect a string.
     });
   }
 

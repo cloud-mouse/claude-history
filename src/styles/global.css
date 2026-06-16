@@ -43,3 +43,13 @@ html, body {
   color: var(--text-muted);
   font-size: var(--font-size-lg);
 }
+
+/* Highlight a message scrolled to from full-text search results (function 1) */
+@keyframes msg-highlight-pulse {
+  0% { background-color: rgba(74, 158, 255, 0.30); }
+  100% { background-color: transparent; }
+}
+.msg-highlight {
+  animation: msg-highlight-pulse 2s ease-out;
+  border-radius: var(--radius-lg);
+}

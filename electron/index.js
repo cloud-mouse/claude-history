@@ -158,6 +158,15 @@ app.whenReady().then(() => {
       });
     }, 3000);
   }
+
+  // Background index/stats backfill (functions 1 & 3). Runs after a short delay
+  // so the window paints first; serial + cooperative so it never blocks the UI.
+  setTimeout(() => {
+    const { backfillAllPending } = require('./backfill');
+    backfillAllPending(store, ({ scanned, total, updated }) => {
+      if (scanned === total) console.log(`[backfill] done: ${updated}/${total} conversations re-indexed`);
+    }).catch(err => console.warn('[backfill] error:', err.message));
+  }, 5000);
 });
 
 app.on('window-all-closed', () => {

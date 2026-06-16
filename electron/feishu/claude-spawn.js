@@ -113,6 +113,7 @@ function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, hookToken
     let stderr = '';
     let jsonBuf = '';
     let resultText = '';
+    let resultMeta = null;
     let resolved = false;
 
     child.stdout.on('data', (data) => {
@@ -124,7 +125,16 @@ function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, hookToken
         if (!line) continue;
         try {
           const obj = JSON.parse(line);
-          if (obj.type === 'result' && obj.result) resultText = obj.result;
+          if (obj.type === 'result') {
+            if (obj.result) resultText = obj.result;
+            // Capture usage/cost/duration (only available from the live result frame).
+            resultMeta = {
+              usage: obj.usage || null,
+              costUsd: obj.total_cost_usd ?? null,
+              durationMs: obj.duration_ms ?? null,
+              turns: obj.num_turns ?? null
+            };
+          }
           const content = obj.message?.content;
           if (Array.isArray(content) && onToolUse) {
             for (const block of content) {
@@ -134,7 +144,7 @@ function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, hookToken
           // Early resolve: send result as soon as we get it, don't wait for process exit
           if (obj.type === 'result' && !resolved) {
             resolved = true;
-            resolve(resultText || '(空响应)');
+            resolve({ text: resultText || '(空响应)', meta: resultMeta });
           }
         } catch {}
       }
@@ -147,7 +157,7 @@ function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, hookToken
     child.on('close', (code) => {
       if (settingsPath) try { fs.unlinkSync(settingsPath); } catch {}
       if (resolved) return; // Already resolved via early result
-      if (code === 0) resolve(resultText || '(空响应)');
+      if (code === 0) resolve({ text: resultText || '(空响应)', meta: resultMeta });
       else reject(new Error(`Claude Code 错误: ${(stderr.trim() || 'exit code ' + code).slice(0, 200)}`));
     });
 

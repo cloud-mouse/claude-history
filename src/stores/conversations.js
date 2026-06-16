@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref, computed, reactive } from 'vue';
+import { ref, computed, reactive, nextTick } from 'vue';
 import { extractTitle, cleanTitle } from '../utils/title-extractor.js';
 
 export const useConversationsStore = defineStore('conversations', () => {
@@ -14,8 +14,12 @@ export const useConversationsStore = defineStore('conversations', () => {
     activeConversation.value?.messages?.find(m => m.id === selectedConvId.value) || null
   );
 
-  async function openConversation(conv, forceReload = false) {
-    if (!forceReload && activeConversation.value?.filePath === conv.filePath) return;
+  async function openConversation(conv, forceReload = false, focusMessageId = null) {
+    // If the same conversation is already open, just (re)focus a message if asked.
+    if (!forceReload && activeConversation.value?.filePath === conv.filePath) {
+      if (focusMessageId) scrollToMessage(focusMessageId);
+      return;
+    }
     loading.value = true;
     try {
       let conversation;
@@ -63,9 +67,25 @@ export const useConversationsStore = defineStore('conversations', () => {
           }
         }
       }
+
+      if (focusMessageId) scrollToMessage(focusMessageId);
     } finally {
       loading.value = false;
     }
+  }
+
+  // Scroll the message thread to a specific message and flash a highlight.
+  // Double nextTick: wait for the active conversation to render + lay out first.
+  function scrollToMessage(messageId) {
+    nextTick(() => {
+      nextTick(() => {
+        const el = document.getElementById('msg-' + messageId);
+        if (!el) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('msg-highlight');
+        setTimeout(() => el.classList.remove('msg-highlight'), 2000);
+      });
+    });
   }
 
   function clearActive() { activeConversation.value = null; }
@@ -91,5 +111,5 @@ export const useConversationsStore = defineStore('conversations', () => {
     await openConversation(conv, true);
   }
 
-  return { selectedConvId, activeConversation, loading, skippedMessages, selectedConv, titleMap, openConversation, clearActive, clearCache, reloadByFilePath };
+  return { selectedConvId, activeConversation, loading, skippedMessages, selectedConv, titleMap, openConversation, scrollToMessage, clearActive, clearCache, reloadByFilePath };
 });
