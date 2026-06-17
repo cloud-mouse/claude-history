@@ -502,6 +502,43 @@ function registerIpcHandlers() {
     }
   });
 
+  // update:check-latest — fetch latest GitHub release + compare (signing-independent).
+  // The UI opens a browser to download, so this works on all platforms (incl. unsigned mac).
+  ipcMain.handle('update:check-latest', async () => {
+    try {
+      const { fetchLatest, isNewer, pickAsset, CURRENT_VERSION } = require('./update-checker');
+      const latest = await fetchLatest();
+      const asset = pickAsset(latest.assets);
+      return {
+        success: true,
+        hasUpdate: isNewer(CURRENT_VERSION, latest.version),
+        current: CURRENT_VERSION,
+        latest: {
+          version: latest.version,
+          name: latest.name,
+          notes: latest.notes,
+          publishedAt: latest.publishedAt,
+          htmlUrl: latest.htmlUrl,
+          asset: asset ? { name: asset.name, url: asset.url } : null
+        }
+      };
+    } catch (err) {
+      console.error('[ipc-handlers] update:check-latest error:', err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
+  // open-external-url — open an https URL in the OS browser (update downloads, etc.).
+  ipcMain.handle('open-external-url', async (_, url) => {
+    try {
+      if (!/^https:\/\/.+/i.test(String(url))) return { success: false, error: '仅允许 https 链接' };
+      await shell.openExternal(url);
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
   console.log('[ipc-handlers] All handlers registered');
 }
 

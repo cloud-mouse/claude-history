@@ -247,9 +247,21 @@ export ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
 pnpm install
 ```
 
-### macOS 上提示"无法打开"
+### macOS 提示"已损坏，无法打开"或"无法打开"
 
-首次运行需要在「系统偏好设置 → 安全性与隐私」中允许应用运行。
+应用未做 Apple 代码签名，从浏览器下载的安装包在较新 macOS（Sequoia 等）会被 Gatekeeper 隔离，提示「已损坏」或「无法打开」。**应用本身没有损坏**。打开「终端」执行下面命令解除隔离：
+
+```bash
+xattr -cr "/Applications/Claude History.app"
+```
+
+> 也可以在「系统设置 → 隐私与安全性」里点击「仍要打开」。
+
+### 自动更新不生效 / macOS 如何更新
+
+- **Windows / Linux**：支持应用内自动更新（未签名，首次运行会有 SmartScreen 提示，属正常）。
+- **macOS**：因应用未做 Apple 代码签名，**不支持应用内自动更新**（electron-updater 在 mac 上强制要求签名校验）。请手动到 [Releases](https://github.com/cloud-mouse/claude-history/releases) 下载新版覆盖安装。
+- 另：`pnpm electron:dev` 开发模式下自动更新模块不会启动（仅在打包应用中生效），所以开发模式看不到更新提示属正常。
 
 ### 构建失败
 

@@ -34,6 +34,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updaterCheck: () => ipcRenderer.invoke('updater:check'),
   updaterDownload: () => ipcRenderer.invoke('updater:download'),
   updaterInstall: () => ipcRenderer.invoke('updater:install'),
+  updateCheckLatest: () => ipcRenderer.invoke('update:check-latest'),
+  openExternalUrl: (url) => ipcRenderer.invoke('open-external-url', url),
 
   // Event listeners (main → renderer) — returns unsubscribe function
   onUpdaterChecking: (callback) => {

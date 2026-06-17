@@ -41,7 +41,7 @@
         :style="{ width: middleCollapsed ? '0px' : middlePanelWidth + 'px' }"
       >
         <div class="panel-header-actions">
-          <UpdateNotification />
+          <UpdateNotification @open="openUpdateModal" />
           <button class="settings-btn" @click="showSearch = true" title="全文搜索 (Ctrl/Cmd+Shift+F)">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="8"></circle>
@@ -102,6 +102,7 @@
     <SettingsModal :show="showSettings" @close="showSettings = false" />
     <StatsModal :show="showStats" @close="showStats = false" />
     <SearchOverlay :show="showSearch" @close="showSearch = false" @select="handleSearchSelect" />
+    <UpdateModal :show="showUpdateModal" @close="showUpdateModal = false" />
   </div>
 </template>
 
@@ -118,18 +119,20 @@ import SettingsModal from './components/feishu/SettingsModal.vue';
 import StatsModal from './components/stats/StatsModal.vue';
 import SearchOverlay from './components/search/SearchOverlay.vue';
 import UpdateNotification from './components/common/UpdateNotification.vue';
+import UpdateModal from './components/common/UpdateModal.vue';
 import { useFeishuStore } from './stores/feishu';
-import { useUpdaterStore } from './stores/updater';
+import { useUpdateStore } from './stores/update';
 
 const projectsStore = useProjectsStore();
 const conversationsStore = useConversationsStore();
 const themeStore = useThemeStore();
 const feishuStore = useFeishuStore();
-const updaterStore = useUpdaterStore();
+const updateStore = useUpdateStore();
 
 const showSettings = ref(false);
 const showStats = ref(false);
 const showSearch = ref(false);
+const showUpdateModal = ref(false);
 
 const leftPanelWidth = ref(240);
 const middlePanelWidth = ref(300);
@@ -148,6 +151,12 @@ function handleProjectSelect(projectId) {
 
 function handleConversationSelect(conv) {
   conversationsStore.openConversation(conv);
+}
+
+// Open the update modal; (re)check latest first so the info is fresh.
+async function openUpdateModal() {
+  await updateStore.check();
+  showUpdateModal.value = true;
 }
 
 // Open a conversation jumped to from full-text search, focusing the matched message.
@@ -260,15 +269,11 @@ onMounted(() => {
     })
   );
 
-  // Updater event listeners
-  _unsubs.push(
-    window.electronAPI.onUpdaterChecking(() => updaterStore.handleChecking()),
-    window.electronAPI.onUpdaterAvailable((info) => updaterStore.handleAvailable(info)),
-    window.electronAPI.onUpdaterNotAvailable(() => updaterStore.handleNotAvailable()),
-    window.electronAPI.onUpdaterProgress((p) => updaterStore.handleProgress(p)),
-    window.electronAPI.onUpdaterDownloaded((info) => updaterStore.handleDownloaded(info)),
-    window.electronAPI.onUpdaterError((err) => updaterStore.handleError(err))
-  );
+  // Startup update check: if a newer release exists, auto-open the update modal.
+  // (Signing-independent — fetches the latest GitHub release, opens browser to download.)
+  updateStore.check().then(() => {
+    if (updateStore.hasUpdate) showUpdateModal.value = true;
+  }).catch(() => {});
 
   // Global shortcut: Cmd/Ctrl+Shift+F opens full-text search.
   // (Cmd/Ctrl+K is already taken by the dev-tools menu item in index.js.)

@@ -88,6 +88,19 @@ jobs:
           | Windows | `*.exe` (Portable) | No installation needed |
           | Linux | `*.AppImage` | Make executable and run |
 
+          ### ⚠️ macOS 安装提示（应用未做代码签名）
+
+          应用未做 Apple 代码签名，从浏览器下载的安装包在较新 macOS（Sequoia 等）上会提示「已损坏，无法打开」。**应用本身没有损坏**，这是 macOS Gatekeeper 对未签名应用的隔离。打开「终端」执行下面命令解除即可：
+
+          ```
+          xattr -cr "/Applications/Claude History.app"
+          ```
+
+          ### 关于自动更新
+
+          - **Windows / Linux**：支持应用内自动检查与更新（未签名，首次运行会有 SmartScreen 提示，属正常）。
+          - **macOS**：因未签名，**不支持应用内自动更新**（electron-updater 在 mac 上强制要求签名）。请手动下载新版覆盖安装。
+
           ### System Requirements
 
           - **macOS** 10.15+ (Catalina or later)

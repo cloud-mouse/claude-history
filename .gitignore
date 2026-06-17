@@ -3,6 +3,7 @@ dist/
 out/
 *.db
 .DS_Store
+design/
 
 # Vitepress cache
 docs/.vitepress/cache/*
