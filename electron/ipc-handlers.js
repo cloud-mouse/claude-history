@@ -91,6 +91,9 @@ function registerIpcHandlers() {
         // Get the project ID
         const dbProject = store.getProjectByPath(project.path);
         if (!dbProject) continue;
+        // Override the raw scan id (folder name) with the DB id so that search
+        // results / stats / delete (which key on conv.project_id, a DB id) match.
+        project.id = dbProject.id;
 
         // Upsert conversations
         for (const conv of project.conversations) {
