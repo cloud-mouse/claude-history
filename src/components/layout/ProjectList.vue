@@ -77,7 +77,7 @@ import ConfirmDialog from '../common/ConfirmDialog.vue';
 
 const props = defineProps({
   projects: Array,
-  selectedId: String,
+  selectedId: [String, Number],
   loading: Boolean,
   error: String
 });
