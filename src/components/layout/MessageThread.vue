@@ -355,9 +355,7 @@ function scrollToTop() {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  padding: 16px 24px;
-  border-bottom: 1px solid var(--border-light);
-  background: var(--bg-secondary);
+  padding: 18px 24px 14px;
   gap: 24px;
 }
 
@@ -427,18 +425,18 @@ function scrollToTop() {
 .expand-btn {
   padding: 6px 12px;
   font-size: var(--font-size-xs);
-  color: var(--primary);
+  color: var(--text-secondary);
   background: transparent;
-  border: 1px solid var(--primary);
-  border-radius: var(--radius-sm);
+  border: none;
+  border-radius: var(--radius-control);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast);
   flex-shrink: 0;
 }
 
 .expand-btn:hover:not(:disabled) {
-  background: var(--primary);
-  color: white;
+  background: var(--surface-hover);
+  color: var(--text-primary);
 }
 
 .expand-btn:disabled {
@@ -449,25 +447,23 @@ function scrollToTop() {
 .session-command-bar {
   display: flex;
   align-items: center;
-  padding: 12px 24px;
-  background: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border-light);
+  padding: 0 24px 14px;
 }
 
 .session-command {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: var(--bg-primary);
+  background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   padding: 6px 10px;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast);
 }
 
 .session-command:hover {
-  border-color: var(--primary);
+  background: var(--surface-hover);
 }
 
 .session-command code {
@@ -492,12 +488,12 @@ function scrollToTop() {
 }
 
 .copy-btn:hover {
-  color: var(--primary);
-  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  background: var(--surface-hover);
 }
 
 .copy-btn.copied {
-  color: var(--color-success);
+  color: var(--success);
 }
 
 .thread-messages {
@@ -562,13 +558,13 @@ function scrollToTop() {
 }
 
 .remote-badge.active {
-  background: rgba(34, 197, 94, 0.1);
-  color: var(--color-success);
+  background: var(--success-bg);
+  color: var(--success);
 }
 
 .remote-badge.idle {
-  background: rgba(245, 158, 11, 0.1);
-  color: var(--color-warning);
+  background: var(--warning-bg);
+  color: var(--warning);
 }
 
 .status-dot-inline {
@@ -579,12 +575,12 @@ function scrollToTop() {
 }
 
 .status-dot-inline.green {
-  background: var(--color-success);
-  box-shadow: 0 0 4px var(--color-success);
+  background: var(--success);
+  box-shadow: 0 0 4px var(--success-bg);
 }
 
 .status-dot-inline.yellow {
-  background: var(--color-warning);
+  background: var(--warning);
 }
 
 /* Session bind info */
@@ -607,7 +603,7 @@ function scrollToTop() {
   font-size: 10px;
   background: var(--bg-tertiary);
   padding: 1px 4px;
-  border-radius: 3px;
+  border-radius: var(--radius-control);
 }
 
 /* Bind to Feishu button */
@@ -628,9 +624,9 @@ function scrollToTop() {
 }
 
 .bind-btn:hover:not(:disabled) {
-  background: var(--bg-tertiary);
+  background: var(--surface-hover);
   color: var(--text-primary);
-  border-color: var(--primary);
+  border-color: var(--border-color);
 }
 
 .bind-btn:disabled {
@@ -649,11 +645,11 @@ function scrollToTop() {
 }
 
 .bind-feedback.success {
-  color: var(--color-success);
+  color: var(--success);
 }
 
 .bind-feedback.error {
-  color: var(--color-error);
+  color: var(--danger);
 }
 
 @keyframes fadeIn {

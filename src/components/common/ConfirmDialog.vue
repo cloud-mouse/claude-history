@@ -69,7 +69,7 @@ function handleCancel() {
   right: 0;
   bottom: 0;
   background-color: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -84,7 +84,6 @@ function handleCancel() {
   width: 90%;
   box-shadow: var(--shadow-lg);
   text-align: center;
-  border: 1px solid var(--border-color);
 }
 
 .dialog-enter-active,
@@ -113,13 +112,13 @@ function handleCancel() {
 }
 
 .confirm-icon.warning {
-  background: linear-gradient(135deg, rgba(180, 83, 9, 0.15), rgba(245, 158, 11, 0.15));
-  color: var(--color-warning);
+  background: var(--warning-bg);
+  color: var(--warning);
 }
 
 .confirm-icon.danger {
-  background: linear-gradient(135deg, rgba(185, 28, 28, 0.15), rgba(220, 38, 38, 0.15));
-  color: var(--color-error);
+  background: var(--danger-bg);
+  color: var(--danger);
 }
 
 .confirm-title {
@@ -161,26 +160,24 @@ function handleCancel() {
 }
 
 .btn-cancel:hover {
-  background-color: var(--border-color);
+  background-color: var(--surface-hover);
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--primary), #92400E);
+  background: var(--primary);
   color: white;
 }
 
 .btn-primary:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
+  background: var(--primary-hover);
 }
 
 .btn-danger {
-  background: linear-gradient(135deg, #DC2626, #B91C1C);
+  background: var(--danger);
   color: white;
 }
 
 .btn-danger:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
+  opacity: 0.9;
 }
 </style>

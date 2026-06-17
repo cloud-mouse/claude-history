@@ -283,8 +283,8 @@ defineExpose({ expandAll, collapseAll });
 
 .source-badge {
   font-size: 10px;
-  color: var(--color-success);
-  background: rgba(34, 197, 94, 0.1);
+  color: var(--success);
+  background: var(--success-bg);
   padding: 1px 6px;
   border-radius: var(--radius-full);
   font-weight: 500;
@@ -298,20 +298,20 @@ defineExpose({ expandAll, collapseAll });
 
 .bubble-content {
   padding: 12px 16px;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-bubble);
 }
 
 .chat-bubble.user .bubble-content {
   background: var(--bubble-user-bg);
   color: var(--bubble-user-text);
-  border-radius: var(--radius-lg) var(--radius-sm) var(--radius-lg) var(--radius-lg);
+  border-radius: var(--radius-card) var(--radius-control) var(--radius-card) var(--radius-card);
 }
 
 .chat-bubble.assistant .bubble-content {
   background: var(--bubble-claude-bg);
   color: var(--bubble-claude-text);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-card);
 }
 
 .text-content {
@@ -344,9 +344,8 @@ defineExpose({ expandAll, collapseAll });
 }
 
 .copy-md-btn:hover {
-  color: var(--primary);
-  border-color: var(--primary);
-  background: var(--bg-secondary);
+  color: var(--text-primary);
+  background: var(--surface-hover);
 }
 
 .chat-bubble.assistant .text-content {
@@ -359,10 +358,10 @@ defineExpose({ expandAll, collapseAll });
 
 .command-body {
   margin-top: 10px;
-  padding: 10px;
-  background-color: rgba(0, 0, 0, 0.05);
-  border-radius: var(--radius-sm);
-  border-left: 3px solid var(--primary);
+  padding: 10px 12px;
+  background-color: var(--code-bg);
+  border-radius: var(--radius-control);
+  border-left: 3px solid var(--accent);
 }
 
 .markdown-content {
@@ -395,24 +394,23 @@ defineExpose({ expandAll, collapseAll });
 }
 
 .markdown-content :deep(code) {
-  background-color: rgba(0, 0, 0, 0.08);
+  background-color: var(--code-bg);
   padding: 0.15em 0.4em;
-  border-radius: 3px;
+  border-radius: var(--radius-control);
   font-family: var(--font-mono);
   font-size: 0.88em;
 }
 
 .chat-bubble.user .markdown-content :deep(code) {
-  background-color: rgba(255, 255, 255, 0.2);
+  background-color: rgba(255, 255, 255, 0.12);
 }
 
 .markdown-content :deep(pre) {
-  background-color: var(--bg-tertiary);
+  background-color: var(--code-bg);
   padding: 12px 16px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   overflow-x: auto;
   margin: 0.8em 0;
-  border: 1px solid var(--border-color);
 }
 
 .chat-bubble.user .markdown-content :deep(pre) {
@@ -425,12 +423,12 @@ defineExpose({ expandAll, collapseAll });
 }
 
 .markdown-content :deep(blockquote) {
-  border-left: 3px solid var(--primary);
+  border-left: 3px solid var(--accent);
   margin: 0.5em 0;
   padding: 0.3em 0 0.3em 1em;
   opacity: 0.85;
-  background: rgba(0, 0, 0, 0.02);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--surface-hover);
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
 }
 
 .markdown-content :deep(table) {
@@ -449,16 +447,16 @@ defineExpose({ expandAll, collapseAll });
   text-align: left;
   font-weight: 600;
   font-size: 0.9em;
-  border-bottom: 2px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .markdown-content :deep(td) {
   padding: 8px 12px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-light);
 }
 
 .markdown-content :deep(tr:hover td) {
-  background: rgba(0, 0, 0, 0.02);
+  background: var(--surface-hover);
 }
 
 .markdown-content :deep(hr) {
@@ -487,7 +485,7 @@ defineExpose({ expandAll, collapseAll });
 .attached-image {
   max-width: 100%;
   max-height: 400px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-card);
   cursor: zoom-in;
 }
 
@@ -499,7 +497,7 @@ defineExpose({ expandAll, collapseAll });
   color: var(--text-muted);
   background: var(--bg-tertiary);
   padding: 6px 12px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-control);
 }
 </style>
 

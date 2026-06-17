@@ -61,20 +61,19 @@ function selectTheme(themeId) {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  border: none;
+  border-radius: var(--radius-control);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast);
   color: var(--text-secondary);
 }
 
 .theme-btn:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-hover);
   color: var(--text-primary);
-  border-color: var(--primary);
 }
 
 .theme-icon {
@@ -83,7 +82,7 @@ function selectTheme(themeId) {
 
 .theme-dropdown {
   position: absolute;
-  top: calc(100% + 8px);
+  bottom: calc(100% + 8px);
   right: 0;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
@@ -111,12 +110,12 @@ function selectTheme(themeId) {
 }
 
 .theme-option:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-hover);
 }
 
 .theme-option.active {
-  background: rgba(37, 99, 235, 0.1);
-  color: var(--primary);
+  background: var(--surface-selected);
+  color: var(--surface-selected-text);
 }
 
 .option-icon {
@@ -130,7 +129,7 @@ function selectTheme(themeId) {
 }
 
 .check-icon {
-  color: var(--primary);
+  color: var(--accent);
 }
 
 .backdrop {

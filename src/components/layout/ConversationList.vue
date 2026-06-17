@@ -125,17 +125,18 @@ function formatDate(timestamp) {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--bg-secondary);
+  width: 100%;
+  background: transparent;
 }
 
 .conversation-list-header {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-light);
+  padding: 12px 12px 8px;
 }
 
 .conversation-list-content {
   flex: 1;
   overflow-y: auto;
+  padding: 0 8px 8px;
 }
 
 .conversation-items {
@@ -145,14 +146,14 @@ function formatDate(timestamp) {
 }
 
 .conversation-item {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-light);
+  padding: 10px 12px;
+  border-radius: var(--radius-card);
   cursor: pointer;
   transition: background var(--transition-fast);
 }
 
 .conversation-item:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-hover);
 }
 
 .conversation-item:hover .delete-btn {
@@ -160,8 +161,8 @@ function formatDate(timestamp) {
 }
 
 .conversation-item.active {
-  background: var(--primary);
-  color: white;
+  background: var(--surface-selected);
+  color: var(--surface-selected-text);
 }
 
 .conv-main {
@@ -172,11 +173,15 @@ function formatDate(timestamp) {
 }
 
 .binding-dot {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: #4caf50; flex-shrink: 0;
-  box-shadow: 0 0 6px #4caf5088;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  flex-shrink: 0;
+  box-shadow: 0 0 6px var(--success-bg);
   animation: pulse-dot 2s ease-in-out infinite;
 }
+
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
@@ -192,16 +197,16 @@ function formatDate(timestamp) {
 
 .large-file-badge {
   font-size: var(--font-size-xs);
-  color: var(--color-warning);
-  background: rgba(245, 158, 11, 0.1);
+  color: var(--warning);
+  background: var(--warning-bg);
   padding: 2px 6px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-control);
   flex-shrink: 0;
 }
 
 .conversation-item.active .large-file-badge {
-  color: rgba(255, 255, 255, 0.9);
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--surface-hover);
+  opacity: 0.85;
 }
 
 .conv-footer {
@@ -216,7 +221,7 @@ function formatDate(timestamp) {
 }
 
 .conversation-item.active .conv-date {
-  color: rgba(255, 255, 255, 0.7);
+  opacity: 0.6;
 }
 
 .delete-btn {
@@ -227,7 +232,7 @@ function formatDate(timestamp) {
   height: 24px;
   background: transparent;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-control);
   color: var(--text-muted);
   cursor: pointer;
   opacity: 0;
@@ -235,18 +240,13 @@ function formatDate(timestamp) {
 }
 
 .conversation-item.active .delete-btn {
-  opacity: 1;
-  color: rgba(255, 255, 255, 0.7);
+  opacity: 0.6;
 }
 
 .delete-btn:hover {
-  color: var(--color-error);
-  background: rgba(239, 68, 68, 0.1);
-}
-
-.conversation-item.active .delete-btn:hover {
-  color: white;
-  background: rgba(255, 255, 255, 0.2);
+  color: var(--danger);
+  background: var(--danger-bg);
+  opacity: 1;
 }
 
 .empty-state {

@@ -6,15 +6,44 @@
         :class="{ collapsed: leftCollapsed }"
         :style="{ width: leftCollapsed ? '0px' : leftPanelWidth + 'px' }"
       >
-        <ProjectList
-          :projects="projectsStore.projects"
-          :selectedId="projectsStore.selectedProjectId"
-          :loading="projectsStore.loading"
-          :error="projectsStore.error"
-          @select="handleProjectSelect"
-          @refresh="handleRefresh"
-          @delete="handleProjectDelete"
-        />
+        <div class="app-header">
+          <span class="app-title">Claude History</span>
+        </div>
+        <div class="left-list-wrap">
+          <ProjectList
+            :projects="projectsStore.projects"
+            :selectedId="projectsStore.selectedProjectId"
+            :loading="projectsStore.loading"
+            :error="projectsStore.error"
+            @select="handleProjectSelect"
+            @refresh="handleRefresh"
+            @delete="handleProjectDelete"
+          />
+        </div>
+        <div class="app-toolbar">
+          <UpdateNotification @open="openUpdateModal" />
+          <button class="settings-btn" @click="showSearch = true" title="全文搜索 (Ctrl/Cmd+Shift+F)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </button>
+          <button class="settings-btn" @click="showStats = true" title="使用统计">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="20" x2="18" y2="10"></line>
+              <line x1="12" y1="20" x2="12" y2="4"></line>
+              <line x1="6" y1="20" x2="6" y2="14"></line>
+            </svg>
+          </button>
+          <button class="settings-btn" @click="showSettings = true" title="设置"
+            :class="{ connected: feishuStore.connected }">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
+            </svg>
+          </button>
+          <ThemeSelector />
+        </div>
       </aside>
 
       <div class="panel-divider">
@@ -40,30 +69,6 @@
         :class="{ collapsed: middleCollapsed }"
         :style="{ width: middleCollapsed ? '0px' : middlePanelWidth + 'px' }"
       >
-        <div class="panel-header-actions">
-          <UpdateNotification @open="openUpdateModal" />
-          <button class="settings-btn" @click="showSearch = true" title="全文搜索 (Ctrl/Cmd+Shift+F)">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-          </button>
-          <button class="settings-btn" @click="showStats = true" title="使用统计">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="20" x2="18" y2="10"></line>
-              <line x1="12" y1="20" x2="12" y2="4"></line>
-              <line x1="6" y1="20" x2="6" y2="14"></line>
-            </svg>
-          </button>
-          <button class="settings-btn" @click="showSettings = true" title="设置"
-            :class="{ connected: feishuStore.connected }">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="3"></circle>
-              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
-            </svg>
-          </button>
-          <ThemeSelector />
-        </div>
         <ConversationList
           :conversations="currentConversations"
           :selectedId="conversationsStore.activeConversation?.filePath"
@@ -313,24 +318,47 @@ onUnmounted(() => {
 
 .panel-left {
   flex-shrink: 0;
+  background: var(--bg-panel);
 }
 
 .panel-middle {
   flex-shrink: 0;
+  background: var(--bg-panel);
 }
 
 .panel-right {
   flex: 1;
 }
 
-.panel-header-actions {
+.app-header {
   display: flex;
-  justify-content: flex-end;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-light);
-  background: var(--bg-secondary);
-  gap: 6px;
   align-items: center;
+  padding: 14px 16px 10px;
+  flex-shrink: 0;
+}
+
+.app-title {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.2px;
+}
+
+.left-list-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+}
+
+.app-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border-light);
+  flex-shrink: 0;
 }
 
 .settings-btn {
@@ -340,22 +368,20 @@ onUnmounted(() => {
   width: 32px;
   height: 32px;
   background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  border: none;
+  border-radius: var(--radius-control);
   cursor: pointer;
   color: var(--text-secondary);
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .settings-btn:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-hover);
   color: var(--text-primary);
-  border-color: var(--primary);
 }
 
 .settings-btn.connected {
   color: var(--color-success);
-  border-color: var(--color-success);
 }
 
 .panel-divider {
@@ -373,22 +399,21 @@ onUnmounted(() => {
   width: 24px;
   height: 48px;
   background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  border: none;
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
   cursor: pointer;
   color: var(--text-muted);
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .expand-btn:hover {
-  background: var(--primary);
-  color: white;
-  border-color: var(--primary);
+  background: var(--surface-hover);
+  color: var(--text-primary);
 }
 
 .resize-handle {
   width: 8px;
-  background-color: var(--border-light);
+  background-color: transparent;
   cursor: col-resize;
   display: flex;
   align-items: center;
@@ -398,11 +423,11 @@ onUnmounted(() => {
 }
 
 .resize-handle:hover {
-  background-color: var(--bg-tertiary);
+  background-color: var(--surface-hover);
 }
 
 .resize-handle:hover .handle-line {
-  background-color: var(--primary);
+  background-color: var(--text-muted);
   transform: scaleY(1.3);
 }
 
@@ -411,7 +436,7 @@ onUnmounted(() => {
   height: 40px;
   background-color: var(--border-color);
   border-radius: var(--radius-full);
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast), transform var(--transition-fast);
 }
 
 .collapse-btn {
@@ -424,13 +449,13 @@ onUnmounted(() => {
   border: none;
   cursor: pointer;
   color: var(--text-muted);
-  border-radius: var(--radius-sm);
-  transition: all var(--transition-fast);
+  border-radius: var(--radius-control);
+  transition: background var(--transition-fast), color var(--transition-fast);
   margin-top: 4px;
 }
 
 .collapse-btn:hover {
-  background: var(--bg-tertiary);
-  color: var(--primary);
+  background: var(--surface-hover);
+  color: var(--text-primary);
 }
 </style>

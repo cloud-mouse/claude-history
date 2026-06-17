@@ -72,18 +72,9 @@ defineExpose({ expandAll, collapseAll });
 <style scoped>
 .task-update-block {
   margin-top: 8px;
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   overflow: hidden;
   background-color: var(--bg-secondary);
-}
-
-.task-update-block.completed {
-  border-color: rgba(22, 163, 74, 0.3);
-}
-
-.task-update-block.deleted {
-  border-color: rgba(185, 28, 28, 0.3);
 }
 
 .update-header {
@@ -92,7 +83,6 @@ defineExpose({ expandAll, collapseAll });
   gap: 8px;
   padding: 8px 12px;
   background-color: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border-color);
 }
 
 .update-icon {
@@ -101,15 +91,15 @@ defineExpose({ expandAll, collapseAll });
 }
 
 .task-update-block.completed .update-icon {
-  color: #16a34a;
+  color: var(--success);
 }
 
 .task-update-block.in_progress .update-icon {
-  color: #2563eb;
+  color: var(--accent);
 }
 
 .task-update-block.deleted .update-icon {
-  color: var(--color-error);
+  color: var(--danger);
 }
 
 .task-update-block.pending .update-icon {
@@ -130,13 +120,13 @@ defineExpose({ expandAll, collapseAll });
 }
 
 .status-badge.completed {
-  color: #16a34a;
-  background: rgba(22, 163, 74, 0.1);
+  color: var(--success);
+  background: var(--success-bg);
 }
 
 .status-badge.in_progress {
-  color: #2563eb;
-  background: rgba(37, 99, 235, 0.1);
+  color: var(--accent);
+  background: var(--accent-bg);
 }
 
 .status-badge.pending {
@@ -145,8 +135,8 @@ defineExpose({ expandAll, collapseAll });
 }
 
 .status-badge.deleted {
-  color: var(--color-error);
-  background: rgba(185, 28, 28, 0.1);
+  color: var(--danger);
+  background: var(--danger-bg);
 }
 
 .task-id {

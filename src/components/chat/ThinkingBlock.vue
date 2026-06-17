@@ -45,9 +45,9 @@ defineExpose({ expandAll, collapseAll });
 <style scoped>
 .thinking-block {
   margin-top: 8px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   overflow: hidden;
+  background-color: var(--bg-secondary);
 }
 
 .toggle-btn {
@@ -63,10 +63,11 @@ defineExpose({ expandAll, collapseAll });
   font-size: var(--font-size-sm);
   color: var(--text-primary);
   text-align: left;
+  transition: background var(--transition-fast);
 }
 
 .toggle-btn:hover {
-  background-color: var(--border-color);
+  background-color: var(--surface-hover);
 }
 
 .toggle-icon {
@@ -82,7 +83,6 @@ defineExpose({ expandAll, collapseAll });
 .thinking-content {
   padding: 12px;
   background-color: var(--bg-primary);
-  border-top: 1px solid var(--border-color);
 }
 
 .thinking-text {

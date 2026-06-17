@@ -2,13 +2,13 @@
   <div class="project-list">
     <div class="project-list-header">
       <div class="header-title">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
         </svg>
         <h2>项目</h2>
       </div>
       <button class="refresh-btn" @click="$emit('refresh')" :disabled="loading" title="刷新">
-        <svg :class="{ spinning: loading }" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg :class="{ spinning: loading }" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M23 4v6h-6M1 20v-6h6"/>
           <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
         </svg>
@@ -142,47 +142,49 @@ function getShortPath(path) {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--bg-secondary);
+  width: 100%;
+  background: transparent;
 }
 
 .project-list-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px;
-  border-bottom: 1px solid var(--border-light);
+  padding: 14px 14px 6px;
 }
 
 .header-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  color: var(--text-primary);
+  gap: 7px;
+  color: var(--text-muted);
 }
 
 .header-title h2 {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   font-weight: 600;
   margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
 }
 
 .refresh-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
+  border: none;
+  border-radius: var(--radius-control);
+  color: var(--text-muted);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .refresh-btn:hover:not(:disabled) {
-  color: var(--primary);
-  border-color: var(--primary);
+  background: var(--surface-hover);
+  color: var(--text-primary);
 }
 
 .refresh-btn:disabled {
@@ -201,13 +203,14 @@ function getShortPath(path) {
 .project-list-content {
   flex: 1;
   overflow-y: auto;
+  padding: 4px 8px 8px;
 }
 
 .sort-bar {
   display: flex;
   align-items: center;
   gap: 0;
-  padding: 0 16px 8px;
+  padding: 2px 4px 6px;
 }
 
 .sort-icon {
@@ -225,39 +228,39 @@ function getShortPath(path) {
   background: transparent;
   border: none;
   cursor: pointer;
-  opacity: 0.6;
+  opacity: 0.7;
   transition: all var(--transition-fast);
 }
 
 .sort-btn:hover {
   opacity: 1;
-  color: var(--primary);
+  color: var(--text-secondary);
 }
 
 .sort-btn.active {
   opacity: 1;
-  color: var(--primary);
+  color: var(--accent);
   font-weight: 600;
 }
 
 .project-items {
   list-style: none;
   margin: 0;
-  padding: 8px;
+  padding: 0;
 }
 
 .project-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px;
-  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  border-radius: var(--radius-card);
   cursor: pointer;
   transition: background var(--transition-fast);
 }
 
 .project-item:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-hover);
 }
 
 .project-item:hover .delete-btn {
@@ -265,8 +268,8 @@ function getShortPath(path) {
 }
 
 .project-item.active {
-  background: var(--primary);
-  color: white;
+  background: var(--surface-selected);
+  color: var(--surface-selected-text);
 }
 
 .project-info {
@@ -293,7 +296,7 @@ function getShortPath(path) {
 }
 
 .project-item.active .project-path {
-  color: rgba(255, 255, 255, 0.7);
+  opacity: 0.6;
 }
 
 .project-actions {
@@ -311,8 +314,7 @@ function getShortPath(path) {
 }
 
 .project-item.active .project-count {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
+  background: var(--surface-hover);
 }
 
 .delete-btn {
@@ -323,7 +325,7 @@ function getShortPath(path) {
   height: 24px;
   background: transparent;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-control);
   color: var(--text-muted);
   cursor: pointer;
   opacity: 0;
@@ -331,18 +333,13 @@ function getShortPath(path) {
 }
 
 .project-item.active .delete-btn {
-  opacity: 1;
-  color: rgba(255, 255, 255, 0.7);
+  opacity: 0.6;
 }
 
 .delete-btn:hover {
-  color: var(--color-error);
-  background: rgba(239, 68, 68, 0.1);
-}
-
-.project-item.active .delete-btn:hover {
-  color: white;
-  background: rgba(255, 255, 255, 0.2);
+  color: var(--danger);
+  background: var(--danger-bg);
+  opacity: 1;
 }
 
 .empty-state,
@@ -355,21 +352,22 @@ function getShortPath(path) {
 
 .error-state p {
   margin: 0 0 12px;
-  color: var(--color-error);
+  color: var(--danger);
 }
 
 .retry-btn {
   padding: 6px 16px;
   font-size: var(--font-size-sm);
-  color: var(--primary);
+  color: var(--accent);
   background: transparent;
-  border: 1px solid var(--primary);
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-control);
   cursor: pointer;
+  transition: background var(--transition-fast);
 }
 
 .retry-btn:hover {
-  background: var(--primary);
+  background: var(--accent);
   color: white;
 }
 </style>

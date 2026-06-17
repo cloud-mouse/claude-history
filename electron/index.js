@@ -9,7 +9,8 @@ let mainWindow;
 let feishuBridge = null;
 
 function createWindow() {
-  mainWindow = new BrowserWindow({
+  const isMac = process.platform === 'darwin';
+  const windowOptions = {
     width: 1200,
     height: 800,
     minWidth: 800,
@@ -20,7 +21,13 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false
     }
-  });
+  };
+  // macOS: native vibrancy so the semi-transparent side panels show frosted glass.
+  if (isMac) {
+    windowOptions.vibrancy = 'under-window';
+    windowOptions.visualEffectState = 'active';
+  }
+  mainWindow = new BrowserWindow(windowOptions);
 
   // H4: defense-in-depth against phishing/navigation hijacking. Any external
   // http(s) link opened from rendered markdown is handed to the OS browser;

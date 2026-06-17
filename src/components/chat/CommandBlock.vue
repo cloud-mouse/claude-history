@@ -58,8 +58,7 @@ defineExpose({ expandAll, collapseAll });
 <style scoped>
 .command-block {
   margin-bottom: 12px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   overflow: hidden;
   background-color: var(--bg-secondary);
 }
@@ -70,19 +69,18 @@ defineExpose({ expandAll, collapseAll });
   gap: 8px;
   padding: 8px 12px;
   background-color: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border-color);
 }
 
 .command-icon {
   display: flex;
   align-items: center;
-  color: var(--primary);
+  color: var(--accent);
 }
 
 .command-name {
   font-weight: 600;
   font-size: var(--font-size-sm);
-  color: var(--primary);
+  color: var(--accent);
   font-family: var(--font-mono);
 }
 

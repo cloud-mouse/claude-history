@@ -47,11 +47,11 @@ input {
   width: 100%;
   padding: 8px 32px 8px 12px;
   font-size: var(--font-size-sm);
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
   color: var(--text-primary);
-  transition: border-color var(--transition-fast);
+  transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 
 input::placeholder {
@@ -60,7 +60,8 @@ input::placeholder {
 
 input:focus {
   outline: none;
-  border-color: var(--primary);
+  border-color: var(--accent);
+  background: var(--surface-hover);
 }
 
 .clear-btn {

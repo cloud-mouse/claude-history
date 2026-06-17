@@ -92,7 +92,6 @@ defineExpose({ expandAll, collapseAll });
 <style scoped>
 .ask-question-block {
   margin-top: 8px;
-  border: 1px solid var(--primary);
   border-radius: var(--radius-md);
   overflow: hidden;
   background-color: var(--bg-secondary);
@@ -103,14 +102,13 @@ defineExpose({ expandAll, collapseAll });
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(99, 102, 241, 0.1));
-  border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+  background-color: var(--bg-tertiary);
 }
 
 .question-icon {
   display: flex;
   align-items: center;
-  color: var(--primary);
+  color: var(--accent);
 }
 
 .question-label {
@@ -139,8 +137,8 @@ defineExpose({ expandAll, collapseAll });
 .question-tag {
   font-size: var(--font-size-xs);
   font-weight: 600;
-  color: var(--primary);
-  background: rgba(59, 130, 246, 0.1);
+  color: var(--accent);
+  background: var(--accent-bg);
   padding: 2px 8px;
   border-radius: var(--radius-sm);
   text-transform: uppercase;
@@ -182,8 +180,8 @@ defineExpose({ expandAll, collapseAll });
 }
 
 .option-item.selected {
-  border-color: var(--primary);
-  background: rgba(59, 130, 246, 0.06);
+  border-color: var(--accent);
+  background: var(--accent-bg);
 }
 
 .option-index {
@@ -202,9 +200,9 @@ defineExpose({ expandAll, collapseAll });
 }
 
 .option-item.selected .option-index {
-  background: var(--primary);
+  background: var(--accent);
   color: white;
-  border-color: var(--primary);
+  border-color: var(--accent);
 }
 
 .option-content {
@@ -231,6 +229,6 @@ defineExpose({ expandAll, collapseAll });
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  color: var(--primary);
+  color: var(--accent);
 }
 </style>

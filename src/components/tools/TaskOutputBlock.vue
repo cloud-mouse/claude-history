@@ -60,7 +60,6 @@ defineExpose({ expandAll, collapseAll });
 <style scoped>
 .task-output-block {
   margin-top: 8px;
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   overflow: hidden;
   background-color: var(--bg-secondary);
@@ -72,7 +71,6 @@ defineExpose({ expandAll, collapseAll });
   gap: 8px;
   padding: 8px 12px;
   background-color: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border-color);
 }
 
 .output-icon {
@@ -90,8 +88,8 @@ defineExpose({ expandAll, collapseAll });
 .block-badge {
   font-size: var(--font-size-xs);
   font-weight: 500;
-  color: #d97706;
-  background: rgba(245, 158, 11, 0.1);
+  color: var(--warning);
+  background: var(--warning-bg);
   padding: 2px 8px;
   border-radius: var(--radius-sm);
   animation: pulse 2s ease-in-out infinite;

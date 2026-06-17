@@ -107,14 +107,14 @@ function highlight(p) {
 <style scoped>
 .search-overlay {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.45); z-index: 1100;
+  background: rgba(0,0,0,0.45); backdrop-filter: blur(8px); z-index: 1100;
   display: flex; align-items: flex-start; justify-content: center; padding-top: 12vh;
 }
 .search-modal {
   background: var(--bg-primary, #1e1e1e); color: var(--text-primary, #e0e0e0);
-  border-radius: 12px; width: 600px; max-width: 92vw; max-height: 76vh;
+  border-radius: var(--radius-card); width: 600px; max-width: 92vw; max-height: 76vh;
   display: flex; flex-direction: column; overflow: hidden;
-  box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  box-shadow: var(--shadow-lg);
 }
 .search-input-row {
   display: flex; align-items: center; gap: 10px; padding: 14px 16px;
@@ -132,9 +132,10 @@ function highlight(p) {
 .state-msg.error { color: var(--color-error, #ff6666); }
 
 .result-item {
-  padding: 10px 12px; border-radius: 8px; cursor: pointer; transition: background 0.12s;
+  padding: 10px 12px; border-radius: var(--radius-card); cursor: pointer; transition: background 0.12s;
 }
-.result-item.active, .result-item:hover { background: var(--bg-tertiary, #2d2d2d); }
+.result-item:hover { background: var(--surface-hover); }
+.result-item.active { background: var(--surface-selected); color: var(--surface-selected-text); }
 .result-head { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
 .result-proj {
   font-size: 11px; color: var(--text-muted, #888);
@@ -152,7 +153,7 @@ function highlight(p) {
   max-height: 60px; overflow: hidden;
 }
 .result-preview :deep(mark) {
-  background: rgba(74, 158, 255, 0.25); color: var(--primary, #4a9eff);
+  background: var(--accent-bg); color: var(--accent);
   padding: 0 2px; border-radius: 3px;
 }
 

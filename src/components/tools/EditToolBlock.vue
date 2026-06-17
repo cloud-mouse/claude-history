@@ -60,7 +60,6 @@ defineExpose({ expandAll, collapseAll });
 <style scoped>
 .edit-tool-block {
   margin-top: 8px;
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   overflow: hidden;
   background-color: var(--bg-secondary);
@@ -72,13 +71,12 @@ defineExpose({ expandAll, collapseAll });
   gap: 8px;
   padding: 8px 12px;
   background-color: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border-color);
 }
 
 .edit-icon {
   display: flex;
   align-items: center;
-  color: var(--primary);
+  color: var(--accent);
 }
 
 .edit-label {
@@ -115,7 +113,7 @@ defineExpose({ expandAll, collapseAll });
 
 .field-value.file-path {
   font-family: var(--font-mono);
-  color: var(--primary);
+  color: var(--accent);
   background-color: var(--bg-tertiary);
   padding: 4px 8px;
   border-radius: var(--radius-sm);
@@ -135,12 +133,10 @@ defineExpose({ expandAll, collapseAll });
 }
 
 .code-diff.old {
-  background-color: rgba(220, 38, 38, 0.1);
-  border: 1px solid rgba(220, 38, 38, 0.3);
+  background-color: var(--diff-del-bg);
 }
 
 .code-diff.new {
-  background-color: rgba(22, 163, 74, 0.1);
-  border: 1px solid rgba(22, 163, 74, 0.3);
+  background-color: var(--diff-add-bg);
 }
 </style>

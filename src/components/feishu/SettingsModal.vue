@@ -10,7 +10,7 @@
 
           <div class="modal-body">
             <!-- Connection status -->
-            <div class="status-section">
+            <div class="setting-card status-card">
               <span class="status-dot" :class="feishuStore.connected ? 'connected' : 'disconnected'"></span>
               <span class="status-text">
                 {{ feishuStore.connected ? '已连接' : '未连接' }}
@@ -19,21 +19,24 @@
             </div>
 
             <!-- Feishu credentials -->
-            <div class="form-section">
-              <label class="form-label">App ID</label>
-              <input v-model="appId" class="form-input" placeholder="cli_xxxxxxxxxxxxx" />
-
-              <label class="form-label" style="margin-top: 12px">App Secret</label>
-              <input v-model="appSecret" class="form-input" type="password" placeholder="飞书应用密钥" />
-
+            <div class="setting-card">
+              <h3 class="card-title">应用凭证</h3>
+              <div class="form-row">
+                <label class="form-label">App ID</label>
+                <input v-model="appId" class="form-input" placeholder="cli_xxxxxxxxxxxxx" />
+              </div>
+              <div class="form-row">
+                <label class="form-label">App Secret</label>
+                <input v-model="appSecret" class="form-input" type="password" placeholder="飞书应用密钥" />
+              </div>
               <button class="btn btn-primary" @click="saveConfig" :disabled="feishuStore.loading">
                 {{ feishuStore.config.hasSecret ? '更新凭证' : '保存凭证' }}
               </button>
             </div>
 
             <!-- C2: Sender allowlist -->
-            <div class="form-section">
-              <label class="form-label">允许的用户白名单</label>
+            <div class="setting-card">
+              <h3 class="card-title">用户白名单</h3>
               <p class="form-hint">
                 填写允许使用机器人的飞书用户 open_id（每行一个，以 <code>ou_</code> 开头）。
                 <strong>留空 = 允许所有人</strong>。为防止群里任意成员远程触发命令，强烈建议填写。
@@ -46,16 +49,16 @@
             </div>
 
             <!-- Connection toggle -->
-            <div class="toggle-section" v-if="feishuStore.config.hasSecret">
-              <span>飞书桥接</span>
+            <div class="setting-card toggle-card" v-if="feishuStore.config.hasSecret">
+              <span class="toggle-label">飞书桥接</span>
               <button class="btn" :class="feishuStore.connected ? 'btn-danger' : 'btn-success'" @click="toggleConnection">
                 {{ feishuStore.connected ? '断开' : '连接' }}
               </button>
             </div>
 
             <!-- Active binding -->
-            <div class="binding-section" v-if="feishuStore.binding">
-              <h3>当前绑定</h3>
+            <div class="setting-card" v-if="feishuStore.binding">
+              <h3 class="card-title">当前绑定</h3>
               <div class="binding-info">
                 <p>会话: <code>{{ feishuStore.binding.sessionId?.slice(0, 8) }}...</code></p>
                 <p v-if="feishuStore.binding.chatId?.startsWith('_pending')">
@@ -69,9 +72,9 @@
             </div>
 
             <!-- Instructions -->
-            <div class="help-section">
-              <h3>使用说明</h3>
-              <ol>
+            <div class="setting-card">
+              <h3 class="card-title">使用说明</h3>
+              <ol class="help-list">
                 <li>在飞书开发者后台创建企业自建应用，获取 App ID 和 Secret</li>
                 <li>启用应用的"机器人"功能</li>
                 <li>订阅事件: <code>im.message.receive_v1</code>，使用长连接模式</li>
@@ -140,95 +143,102 @@ async function unbind() {
 <style scoped>
 .settings-overlay {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.5); z-index: 1000;
+  background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(8px); z-index: 1000;
   display: flex; align-items: center; justify-content: center;
 }
 .settings-modal {
-  background: var(--bg-primary, #1e1e1e); color: var(--text-primary, #e0e0e0);
-  border-radius: 12px; width: 480px; max-height: 80vh;
-  overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  background: var(--bg-primary); color: var(--text-primary);
+  border-radius: var(--radius-card); width: 560px; max-width: 92vw; max-height: 85vh;
+  display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: var(--shadow-lg);
 }
 .modal-header {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 16px 20px; border-bottom: 1px solid var(--border-color, #333);
+  padding: 16px 20px; flex-shrink: 0;
 }
 .modal-header h2 { font-size: 16px; font-weight: 600; margin: 0; }
 .close-btn {
-  background: none; border: none; font-size: 20px; cursor: pointer;
-  color: var(--text-secondary, #888); padding: 0 4px;
+  background: none; border: none; font-size: 22px; cursor: pointer;
+  color: var(--text-muted); padding: 2px 6px; line-height: 1;
+  border-radius: var(--radius-control); transition: background var(--transition-fast), color var(--transition-fast);
 }
-.close-btn:hover { color: var(--text-primary, #e0e0e0); }
-.modal-body { padding: 20px; }
+.close-btn:hover { color: var(--text-primary); background: var(--surface-hover); }
+.modal-body { padding: 4px 20px 20px; overflow-y: auto; }
 
-.status-section {
-  display: flex; align-items: center; gap: 8px;
-  margin-bottom: 20px; padding: 12px; border-radius: 8px;
-  background: var(--bg-secondary, #252525);
+.setting-card {
+  background: var(--bg-secondary); border-radius: var(--radius-card);
+  padding: 16px; margin-bottom: 12px;
+}
+.card-title {
+  font-size: 12px; font-weight: 600; color: var(--text-muted);
+  margin: 0 0 14px; text-transform: uppercase; letter-spacing: 0.6px;
+}
+
+.status-card {
+  display: flex; align-items: center; gap: 10px; padding: 12px 16px;
 }
 .status-dot {
-  width: 10px; height: 10px; border-radius: 50%;
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
 }
-.status-dot.connected { background: #4caf50; box-shadow: 0 0 6px #4caf5088; }
-.status-dot.disconnected { background: #666; }
+.status-dot.connected { background: var(--success); box-shadow: 0 0 6px var(--success-bg); }
+.status-dot.disconnected { background: var(--text-muted); }
 .status-text { font-size: 14px; }
-.processing-tag {
-  color: #ff9800; font-size: 12px; margin-left: 8px;
-}
+.processing-tag { color: var(--warning); font-size: 12px; margin-left: 8px; }
 
-.form-section { margin-bottom: 20px; }
-.form-label { display: block; font-size: 13px; color: var(--text-secondary, #888); margin-bottom: 4px; }
+.form-row { margin-bottom: 12px; }
+.form-label { display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; }
 .form-input {
-  width: 100%; padding: 8px 12px; border-radius: 6px;
-  border: 1px solid var(--border-color, #333);
-  background: var(--bg-secondary, #252525); color: var(--text-primary, #e0e0e0);
+  width: 100%; padding: 8px 12px; border-radius: var(--radius-control);
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary); color: var(--text-primary);
   font-size: 14px; box-sizing: border-box;
+  transition: border-color var(--transition-fast);
 }
-.form-input:focus { outline: none; border-color: #4a9eff; }
+.form-input:focus { outline: none; border-color: var(--accent); }
+.form-input::placeholder { color: var(--text-muted); }
 .form-textarea { resize: vertical; font-family: inherit; min-height: 64px; }
 .form-hint {
-  font-size: 12px; color: var(--text-secondary, #888); line-height: 1.5;
-  margin: 4px 0 8px;
+  font-size: 12px; color: var(--text-muted); line-height: 1.5;
+  margin: 0 0 10px;
 }
-.form-hint code { background: var(--bg-primary, #1e1e1e); padding: 1px 5px; border-radius: 3px; font-size: 11px; }
+.form-hint code { background: var(--bg-tertiary); padding: 1px 5px; border-radius: var(--radius-control); font-size: 11px; }
+.form-hint strong { color: var(--text-secondary); }
 
-.toggle-section {
+.toggle-card {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 12px; border-radius: 8px; margin-bottom: 20px;
-  background: var(--bg-secondary, #252525);
+  padding: 14px 16px;
 }
+.toggle-label { font-size: 14px; color: var(--text-primary); }
+.toggle-card .btn { margin-top: 0; }
 
-.binding-section {
-  padding: 12px; border-radius: 8px; margin-bottom: 20px;
-  background: var(--bg-secondary, #252525);
-}
-.binding-section h3 { font-size: 14px; margin: 0 0 8px; }
 .binding-info p { margin: 4px 0; font-size: 13px; }
 .binding-info code {
-  background: var(--bg-primary, #1e1e1e); padding: 2px 6px; border-radius: 4px;
+  background: var(--bg-tertiary); padding: 2px 6px; border-radius: var(--radius-control);
   font-size: 12px;
 }
-.pending-tag { color: #ff9800; font-size: 12px; }
+.pending-tag { color: var(--warning); font-size: 12px; }
 
-.help-section { margin-bottom: 20px; }
-.help-section h3 { font-size: 14px; margin: 0 0 8px; }
-.help-section ol { padding-left: 20px; font-size: 13px; color: var(--text-secondary, #888); }
-.help-section li { margin-bottom: 4px; }
-.help-section code { font-size: 12px; }
+.help-list { padding-left: 20px; font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.6; }
+.help-list li { margin-bottom: 6px; }
+.help-list code { font-size: 12px; background: var(--bg-tertiary); padding: 1px 5px; border-radius: var(--radius-control); }
 
 .error-section {
-  padding: 8px 12px; border-radius: 6px; background: #ff444422;
-  color: #ff6666; font-size: 13px;
+  padding: 10px 14px; border-radius: var(--radius-control); background: var(--danger-bg);
+  color: var(--danger); font-size: 13px; margin-bottom: 12px;
 }
 
 .btn {
-  padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer;
-  font-size: 13px; transition: background 0.2s;
+  padding: 8px 16px; border-radius: var(--radius-control); border: none; cursor: pointer;
+  font-size: 13px; transition: background var(--transition-fast), opacity var(--transition-fast);
   margin-top: 12px;
 }
-.btn-primary { background: #4a9eff; color: white; }
-.btn-primary:hover { background: #3a8eef; }
-.btn-success { background: #4caf50; color: white; }
-.btn-danger { background: #e53935; color: white; }
-.btn-sm { padding: 4px 12px; font-size: 12px; margin-top: 8px; }
+.btn-primary { background: var(--primary); color: white; }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-success { background: var(--success); color: white; }
+.btn-danger { background: var(--danger); color: white; }
+.btn-sm { padding: 4px 12px; font-size: 12px; margin-top: 10px; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.modal-enter-active, .modal-leave-active { transition: opacity 0.2s ease; }
+.modal-enter-from, .modal-leave-to { opacity: 0; }
 </style>

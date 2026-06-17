@@ -98,9 +98,9 @@ const summaryText = computed(() => {
 <style scoped>
 .file-snapshot {
   margin-top: 8px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   overflow: hidden;
+  background-color: var(--bg-secondary);
 }
 
 .toggle-btn {
@@ -116,10 +116,11 @@ const summaryText = computed(() => {
   font-size: var(--font-size-sm);
   color: var(--text-primary);
   text-align: left;
+  transition: background var(--transition-fast);
 }
 
 .toggle-btn:hover {
-  background-color: var(--border-color);
+  background-color: var(--surface-hover);
 }
 
 .toggle-icon {
@@ -134,7 +135,6 @@ const summaryText = computed(() => {
 .file-list {
   padding: 12px;
   background-color: var(--bg-primary);
-  border-top: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -158,22 +158,22 @@ const summaryText = computed(() => {
   font-weight: 600;
   text-transform: uppercase;
   padding: 2px 6px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-control);
 }
 
 .group-label.created {
-  background-color: rgba(22, 163, 74, 0.1);
-  color: var(--color-success);
+  background-color: var(--success-bg);
+  color: var(--success);
 }
 
 .group-label.modified {
-  background-color: rgba(37, 99, 235, 0.1);
-  color: var(--primary);
+  background-color: var(--accent-bg);
+  color: var(--accent);
 }
 
 .group-label.deleted {
-  background-color: rgba(220, 38, 38, 0.1);
-  color: var(--color-error);
+  background-color: var(--danger-bg);
+  color: var(--danger);
 }
 
 .group-count {
@@ -196,24 +196,24 @@ const summaryText = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-control);
   font-weight: bold;
   font-size: 12px;
 }
 
 .action-badge.created {
-  background-color: rgba(22, 163, 74, 0.1);
-  color: var(--color-success);
+  background-color: var(--success-bg);
+  color: var(--success);
 }
 
 .action-badge.modified {
-  background-color: rgba(37, 99, 235, 0.1);
-  color: var(--primary);
+  background-color: var(--accent-bg);
+  color: var(--accent);
 }
 
 .action-badge.deleted {
-  background-color: rgba(220, 38, 38, 0.1);
-  color: var(--color-error);
+  background-color: var(--danger-bg);
+  color: var(--danger);
 }
 
 .file-path {

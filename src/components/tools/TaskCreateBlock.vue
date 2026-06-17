@@ -78,7 +78,6 @@ defineExpose({ expandAll, collapseAll });
 <style scoped>
 .task-create-block {
   margin-top: 8px;
-  border: 1px solid var(--primary);
   border-radius: var(--radius-md);
   overflow: hidden;
   background-color: var(--bg-secondary);
@@ -89,18 +88,19 @@ defineExpose({ expandAll, collapseAll });
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background-color: var(--primary);
-  color: white;
+  background-color: var(--bg-tertiary);
 }
 
 .task-icon {
   display: flex;
   align-items: center;
+  color: var(--accent);
 }
 
 .task-label {
   font-weight: 600;
   font-size: var(--font-size-sm);
+  color: var(--text-primary);
 }
 
 .task-content {
@@ -132,7 +132,7 @@ defineExpose({ expandAll, collapseAll });
 
 .field-value.subject {
   font-weight: 600;
-  color: var(--primary);
+  color: var(--accent);
 }
 
 .field-value.description {
@@ -141,7 +141,7 @@ defineExpose({ expandAll, collapseAll });
   word-break: break-word;
   margin: 0;
   line-height: 1.5;
-  background-color: var(--bg-tertiary);
+  background-color: var(--code-bg);
   padding: 8px;
   border-radius: var(--radius-sm);
 }

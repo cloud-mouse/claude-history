@@ -83,7 +83,6 @@ defineExpose({ expandAll, collapseAll });
 <style scoped>
 .agent-tool-block {
   margin-top: 8px;
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   overflow: hidden;
   background-color: var(--bg-secondary);
@@ -94,14 +93,13 @@ defineExpose({ expandAll, collapseAll });
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1));
-  border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-tertiary);
 }
 
 .agent-icon {
   display: flex;
   align-items: center;
-  color: #6366f1;
+  color: var(--accent);
 }
 
 .agent-label {
@@ -113,11 +111,10 @@ defineExpose({ expandAll, collapseAll });
 .agent-type-badge {
   font-size: var(--font-size-xs);
   font-weight: 500;
-  color: #6366f1;
-  background: rgba(99, 102, 241, 0.1);
+  color: var(--accent);
+  background: var(--accent-bg);
   padding: 2px 8px;
   border-radius: var(--radius-sm);
-  border: 1px solid rgba(99, 102, 241, 0.2);
   margin-left: auto;
 }
 
@@ -176,14 +173,14 @@ defineExpose({ expandAll, collapseAll });
 }
 
 .prompt-toggle:hover {
-  color: var(--primary);
-  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  background: var(--surface-hover);
 }
 
 .prompt-content {
-  background-color: var(--bg-tertiary);
+  background-color: var(--code-bg);
   border-radius: var(--radius-sm);
-  border-left: 3px solid #6366f1;
+  border-left: 3px solid var(--accent);
   overflow: hidden;
 }
 

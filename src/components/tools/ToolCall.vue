@@ -140,7 +140,6 @@ defineExpose({ expandAll, collapseAll });
 <style scoped>
 .tool-call {
   margin-top: 12px;
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   overflow: hidden;
   background: var(--bg-secondary);
@@ -163,7 +162,7 @@ defineExpose({ expandAll, collapseAll });
 }
 
 .toggle-btn:hover {
-  background-color: var(--border-color);
+  background-color: var(--surface-hover);
 }
 
 .toggle-icon {
@@ -178,8 +177,8 @@ defineExpose({ expandAll, collapseAll });
   align-items: center;
   gap: 6px;
   font-weight: 600;
-  color: var(--text-primary);
-  background: linear-gradient(135deg, rgba(180, 83, 9, 0.1), rgba(245, 158, 11, 0.1));
+  color: var(--accent);
+  background: var(--accent-bg);
   padding: 3px 10px;
   border-radius: var(--radius-sm);
   font-size: var(--font-size-xs);
@@ -194,7 +193,6 @@ defineExpose({ expandAll, collapseAll });
 .tool-content {
   padding: 14px;
   background-color: var(--bg-primary);
-  border-top: 1px solid var(--border-color);
   max-height: 500px;
   overflow-y: auto;
 }
@@ -233,9 +231,9 @@ defineExpose({ expandAll, collapseAll });
 .bash-command {
   margin: 0;
   padding: 14px;
-  background-color: var(--bg-tertiary);
+  background-color: var(--code-bg);
   border-radius: var(--radius-md);
-  border-left: 3px solid var(--primary);
+  border-left: 3px solid var(--accent);
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   white-space: pre-wrap;

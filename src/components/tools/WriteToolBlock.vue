@@ -55,7 +55,6 @@ defineExpose({ expandAll, collapseAll });
 <style scoped>
 .write-tool-block {
   margin-top: 8px;
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   overflow: hidden;
   background-color: var(--bg-secondary);
@@ -67,13 +66,12 @@ defineExpose({ expandAll, collapseAll });
   gap: 8px;
   padding: 8px 12px;
   background-color: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border-color);
 }
 
 .write-icon {
   display: flex;
   align-items: center;
-  color: var(--primary);
+  color: var(--accent);
 }
 
 .write-label {
@@ -110,27 +108,14 @@ defineExpose({ expandAll, collapseAll });
 
 .field-value.file-path {
   font-family: var(--font-mono);
-  color: var(--primary);
+  color: var(--accent);
   background-color: var(--bg-tertiary);
   padding: 4px 8px;
   border-radius: var(--radius-sm);
   word-break: break-all;
 }
 
-.code-diff {
-  margin: 0;
-  padding: 12px;
-  border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-sm);
-  white-space: pre-wrap;
-  word-break: break-word;
-  line-height: 1.5;
-  overflow-x: auto;
-}
-
 .code-content {
-  background-color: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
+  background-color: var(--code-bg);
 }
 </style>

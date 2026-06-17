@@ -40,8 +40,7 @@ const modeText = computed(() => {
   gap: 12px;
   padding: 8px 16px;
   background-color: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   font-size: var(--font-size-sm);
   margin: 8px 0;
 }
@@ -59,12 +58,12 @@ const modeText = computed(() => {
 }
 
 .permission-status.granted {
-  background-color: rgba(22, 163, 74, 0.1);
-  color: var(--color-success);
+  background-color: var(--success-bg);
+  color: var(--success);
 }
 
 .permission-status.revoked {
-  background-color: rgba(220, 38, 38, 0.1);
-  color: var(--color-error);
+  background-color: var(--danger-bg);
+  color: var(--danger);
 }
 </style>

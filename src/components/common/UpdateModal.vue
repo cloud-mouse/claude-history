@@ -59,6 +59,7 @@ function formatDate(d) {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -69,15 +70,14 @@ function formatDate(d) {
   position: relative;
   background: var(--bg-secondary);
   color: var(--text-primary);
-  border-radius: 12px;
+  border-radius: var(--radius-card);
   width: 560px;
   max-width: 92vw;
   max-height: 82vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--border-color);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-lg);
 }
 
 .um-close {
@@ -130,7 +130,7 @@ function formatDate(d) {
 
 .um-notes-wrap {
   background: var(--bg-tertiary);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   padding: 14px 16px;
   margin-bottom: 14px;
 }
@@ -172,22 +172,21 @@ function formatDate(d) {
 
 .um-btn {
   padding: 9px 24px;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   border: none;
-  transition: all 0.2s;
+  transition: background 0.2s, color 0.2s;
 }
 
 .um-btn-secondary {
   background: var(--bg-tertiary);
   color: var(--text-primary);
-  border: 1px solid var(--border-color);
 }
 
 .um-btn-secondary:hover {
-  background: var(--border-color);
+  background: var(--surface-hover);
 }
 
 .um-btn-primary {

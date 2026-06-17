@@ -1,6 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  // OS platform, exposed so the renderer can apply platform-specific CSS
+  // (e.g. macOS vibrancy). Set on <html> from main.js once DOM is ready.
+  platform: process.platform,
   scanProjects: () => ipcRenderer.invoke('scan-projects'),
   clearCache: () => ipcRenderer.invoke('clear-cache'),
   invalidateConversationCache: (filePath) => ipcRenderer.invoke('invalidate-conversation-cache', filePath),

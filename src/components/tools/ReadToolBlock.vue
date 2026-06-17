@@ -65,7 +65,6 @@ defineExpose({ expandAll, collapseAll });
 <style scoped>
 .read-tool-block {
   margin-top: 8px;
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   overflow: hidden;
   background-color: var(--bg-secondary);
@@ -77,13 +76,12 @@ defineExpose({ expandAll, collapseAll });
   gap: 8px;
   padding: 8px 12px;
   background-color: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border-color);
 }
 
 .read-icon {
   display: flex;
   align-items: center;
-  color: var(--primary);
+  color: var(--accent);
 }
 
 .read-label {
@@ -121,7 +119,7 @@ defineExpose({ expandAll, collapseAll });
 
 .field-value.file-path {
   font-family: var(--font-mono);
-  color: var(--primary);
+  color: var(--accent);
   background-color: var(--bg-tertiary);
   padding: 4px 8px;
   border-radius: var(--radius-sm);

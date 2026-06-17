@@ -69,15 +69,13 @@ defineExpose({ expandAll, collapseAll });
 <style scoped>
 .tool-result {
   margin-top: 12px;
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   overflow: hidden;
   background: var(--bg-secondary);
 }
 
 .tool-result.error {
-  border-color: rgba(185, 28, 28, 0.5);
-  background: linear-gradient(135deg, rgba(185, 28, 28, 0.05), transparent);
+  background: var(--danger-bg);
 }
 
 .toggle-btn {
@@ -97,7 +95,7 @@ defineExpose({ expandAll, collapseAll });
 }
 
 .toggle-btn:hover {
-  background-color: var(--border-color);
+  background-color: var(--surface-hover);
 }
 
 .toggle-icon {
@@ -123,8 +121,8 @@ defineExpose({ expandAll, collapseAll });
   align-items: center;
   gap: 6px;
   font-weight: 600;
-  color: var(--color-error);
-  background: linear-gradient(135deg, rgba(185, 28, 28, 0.1), rgba(220, 38, 38, 0.1));
+  color: var(--danger);
+  background: var(--danger-bg);
   padding: 3px 10px;
   border-radius: var(--radius-sm);
   font-size: var(--font-size-xs);
@@ -134,13 +132,8 @@ defineExpose({ expandAll, collapseAll });
 .result-content {
   padding: 14px;
   background-color: var(--bg-primary);
-  border-top: 1px solid var(--border-color);
   max-height: 500px;
   overflow-y: auto;
-}
-
-.tool-result.error .result-content {
-  background: linear-gradient(135deg, rgba(185, 28, 28, 0.03), transparent);
 }
 
 .result-text {
@@ -154,6 +147,6 @@ defineExpose({ expandAll, collapseAll });
 }
 
 .tool-result.error .result-text {
-  color: var(--color-error);
+  color: var(--danger);
 }
 </style>

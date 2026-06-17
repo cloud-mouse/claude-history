@@ -163,13 +163,13 @@ function shortModel(m) {
 <style scoped>
 .stats-overlay {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.5); z-index: 1000;
+  background: rgba(0,0,0,0.5); backdrop-filter: blur(8px); z-index: 1000;
   display: flex; align-items: center; justify-content: center;
 }
 .stats-modal {
   background: var(--bg-primary, #1e1e1e); color: var(--text-primary, #e0e0e0);
-  border-radius: 12px; width: 680px; max-width: 92vw; max-height: 85vh;
-  overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  border-radius: var(--radius-card); width: 680px; max-width: 92vw; max-height: 85vh;
+  overflow-y: auto; box-shadow: var(--shadow-lg);
 }
 .modal-header {
   display: flex; justify-content: space-between; align-items: center;
@@ -191,10 +191,10 @@ function shortModel(m) {
   display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px;
 }
 .summary-card {
-  padding: 12px; border-radius: 8px; background: var(--bg-secondary, #252525);
-  text-align: center; border: 1px solid var(--border-color, #333);
+  padding: 12px; border-radius: var(--radius-card); background: var(--bg-secondary, #252525);
+  text-align: center;
 }
-.summary-card.primary { border-color: var(--primary, #4a9eff); }
+.summary-card.primary { box-shadow: inset 0 0 0 1px var(--primary, #4a9eff); }
 .summary-value { font-size: 20px; font-weight: 700; }
 .summary-card.primary .summary-value { color: var(--primary, #4a9eff); }
 .summary-label { font-size: 11px; color: var(--text-muted, #888); margin-top: 4px; }
@@ -235,7 +235,7 @@ tbody tr:hover { background: var(--bg-tertiary, #2d2d2d); }
 .reindex-section { margin-top: 4px; }
 .reindex-hint { font-size: 12px; color: var(--text-muted, #888); line-height: 1.5; margin: 0 0 10px; }
 .reindex-btn {
-  padding: 8px 16px; border-radius: 6px; border: 1px solid var(--primary, #4a9eff);
+  padding: 8px 16px; border-radius: var(--radius-control); border: 1px solid var(--primary, #4a9eff);
   background: transparent; color: var(--primary, #4a9eff); font-size: 13px;
   cursor: pointer; transition: all 0.2s;
 }
@@ -245,13 +245,13 @@ tbody tr:hover { background: var(--bg-tertiary, #2d2d2d); }
 .progress-row { display: flex; justify-content: space-between; align-items: center; }
 .progress-text { font-size: 12px; color: var(--text-secondary, #aaa); }
 .cancel-btn {
-  padding: 4px 12px; border-radius: 5px; border: 1px solid var(--border-color, #333);
+  padding: 4px 12px; border-radius: var(--radius-control); border: 1px solid var(--border-color, #333);
   background: transparent; color: var(--text-secondary, #aaa); font-size: 12px; cursor: pointer;
 }
 .cancel-btn:hover { border-color: var(--color-error, #ff6666); color: var(--color-error, #ff6666); }
 
 .refresh-btn {
-  margin-top: 20px; padding: 8px 16px; border-radius: 6px; border: 1px solid var(--border-color, #333);
+  margin-top: 20px; padding: 8px 16px; border-radius: var(--radius-control); border: 1px solid var(--border-color, #333);
   background: var(--bg-secondary, #252525); color: var(--text-primary, #e0e0e0);
   font-size: 13px; cursor: pointer; transition: all 0.2s;
 }

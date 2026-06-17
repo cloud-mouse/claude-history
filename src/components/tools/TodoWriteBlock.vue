@@ -85,7 +85,6 @@ defineExpose({ expandAll, collapseAll });
 <style scoped>
 .todo-write-block {
   margin-top: 8px;
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   overflow: hidden;
   background-color: var(--bg-secondary);
@@ -97,13 +96,12 @@ defineExpose({ expandAll, collapseAll });
   gap: 8px;
   padding: 8px 12px;
   background-color: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border-color);
 }
 
 .todo-icon {
   display: flex;
   align-items: center;
-  color: var(--primary);
+  color: var(--accent);
 }
 
 .todo-label {
@@ -127,13 +125,13 @@ defineExpose({ expandAll, collapseAll });
 }
 
 .stat.completed-stat {
-  color: #16a34a;
-  background: rgba(22, 163, 74, 0.1);
+  color: var(--success);
+  background: var(--success-bg);
 }
 
 .stat.progress-stat {
-  color: #2563eb;
-  background: rgba(37, 99, 235, 0.1);
+  color: var(--accent);
+  background: var(--accent-bg);
 }
 
 .stat.pending-stat {
@@ -166,11 +164,11 @@ defineExpose({ expandAll, collapseAll });
 }
 
 .todo-item.completed .todo-status-icon {
-  color: #16a34a;
+  color: var(--success);
 }
 
 .todo-item.in_progress .todo-status-icon {
-  color: #2563eb;
+  color: var(--accent);
 }
 
 .todo-item.pending .todo-status-icon {

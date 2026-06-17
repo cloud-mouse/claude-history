@@ -35,23 +35,21 @@ const updateStore = useUpdateStore();
   width: 32px;
   height: 32px;
   background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  border: none;
+  border-radius: var(--radius-control);
   cursor: pointer;
   color: var(--text-secondary);
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast);
   position: relative;
 }
 
 .update-btn:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-hover);
   color: var(--text-primary);
-  border-color: var(--primary);
 }
 
 .update-btn.has-update {
-  color: var(--primary);
-  border-color: var(--primary);
+  color: var(--accent);
 }
 
 .update-dot {
@@ -60,7 +58,7 @@ const updateStore = useUpdateStore();
   right: 4px;
   width: 7px;
   height: 7px;
-  background: var(--color-success);
+  background: var(--success);
   border-radius: 50%;
   animation: pulse 2s infinite;
 }
