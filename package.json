@@ -50,7 +50,8 @@
     "publish": {
       "provider": "github",
       "owner": "cloud-mouse",
-      "repo": "claude-history"
+      "repo": "claude-history",
+      "releaseType": "release"
     }
   },
   "scripts": {
