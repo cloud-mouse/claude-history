@@ -44,7 +44,10 @@
         >
           <div class="project-info">
             <span class="project-name">{{ getDisplayName(project) }}</span>
-            <span class="project-path">{{ getShortPath(project.path) }}</span>
+            <div class="project-meta">
+              <span class="project-path">{{ getShortPath(project.path) }}</span>
+              <span v-if="getLatestTime(project)" class="project-time">{{ formatRelativeTime(getLatestTime(project)) }}</span>
+            </div>
           </div>
           <div class="project-actions">
             <span class="project-count">{{ project.conversations?.length || 0 }}</span>
@@ -134,6 +137,29 @@ function getShortPath(path) {
   const parts = path.split('/').filter(Boolean);
   if (parts.length <= 3) return path;
   return parts.slice(0, 2).join('/') + '/.../' + parts.slice(-1).join('/');
+}
+
+// Most recent conversation mtime — drives the per-item relative timestamp that
+// mirrors the Codex list layout ("title + meta + relative time").
+function getLatestTime(project) {
+  const convs = project.conversations || [];
+  if (!convs.length) return 0;
+  return convs.reduce((max, c) => Math.max(max, c.updatedAt || 0), 0);
+}
+
+function formatRelativeTime(timestamp) {
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  const now = new Date();
+  const mins = Math.floor((now - date) / 60000);
+  if (mins < 1) return '刚刚';
+  if (mins < 60) return `${mins} 分钟前`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} 小时前`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return '昨天';
+  if (days < 7) return `${days} 天前`;
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 </script>
 
@@ -287,15 +313,33 @@ function getShortPath(path) {
   text-overflow: ellipsis;
 }
 
+.project-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  min-width: 0;
+}
+
 .project-path {
   font-size: var(--font-size-xs);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
 }
 
-.project-item.active .project-path {
+.project-time {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.project-item.active .project-path,
+.project-item.active .project-time {
   opacity: 0.6;
 }
 
