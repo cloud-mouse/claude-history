@@ -42,6 +42,7 @@
           <button class="expand-btn" @click="toggleAll">
             {{ allExpanded ? '收起全部' : '展开全部' }}
           </button>
+          <ProjectToolOpener :project-dir="projectDir" />
         </div>
       </div>
 
@@ -110,7 +111,9 @@ import SkeletonLoader from '../common/SkeletonLoader.vue';
 import ChatBubble from '../chat/ChatBubble.vue';
 import PermissionBadge from '../chat/PermissionBadge.vue';
 import FileSnapshot from '../chat/FileSnapshot.vue';
+import ProjectToolOpener from './ProjectToolOpener.vue';
 import { useFeishuStore } from '../../stores/feishu';
+import { resolveProjectDir } from '../../utils/project-path.js';
 
 const props = defineProps({
   conversation: Object,
@@ -136,6 +139,12 @@ const resumeCommand = computed(() => {
   const projectDir = props.conversation.projectDir || props.conversation.filePath.split('/').slice(0, -1).join('/');
   return `cd "${projectDir}" && claude --resume ${fileName}`;
 });
+
+// Real working directory for the active conversation. Preferred source is the cwd
+// recorded in the JSONL (conversation.projectDir); we fall back to decoding the
+// encoded projects-folder name only when no cwd was recorded. Drives the
+// "open with tool" dropdown trigger via :project-dir.
+const projectDir = computed(() => resolveProjectDir(props.conversation));
 
 // Format conversation time
 const conversationTime = computed(() => {

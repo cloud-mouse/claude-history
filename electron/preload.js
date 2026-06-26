@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteConversation: (filePath) => ipcRenderer.invoke('delete-conversation', filePath),
   deleteProject: (projectId) => ipcRenderer.invoke('delete-project', projectId),
   resumeConversation: (filePath, projectDir) => ipcRenderer.invoke('resume-conversation', filePath, projectDir),
+  openProjectWith: (tool, projectDir) => ipcRenderer.invoke('open-project-with', tool, projectDir),
 
   // Feishu bridge API
   feishuGetStatus: () => ipcRenderer.invoke('feishu:getStatus'),

@@ -11,6 +11,7 @@ const { scanProjects } = require('./file-scanner');
 const { parseStream } = require('./jsonl-parser');
 const { parseMessage } = require('./message-parser');
 const { extractTitleFromJsonl } = require('./title-extractor');
+const { openProjectWith } = require('./project-opener');
 
 // Lazy-initialize store to allow data directory creation
 let _store = null;
@@ -501,6 +502,18 @@ function registerIpcHandlers() {
       return { success: true };
     } catch (err) {
       console.error('[ipc-handlers] resume-conversation error:', err.message);
+      return { success: false, error: err.message };
+    }
+  });
+
+  // open-project-with — Open the project's real working directory in an external
+  // editor (Cursor / VS Code / IntelliJ IDEA) or the system terminal. Tool keys are
+  // whitelisted in project-opener.js; the directory is validated before launch.
+  ipcMain.handle('open-project-with', async (_, tool, projectDir) => {
+    try {
+      return openProjectWith(tool, projectDir);
+    } catch (err) {
+      console.error('[ipc-handlers] open-project-with error:', err.message);
       return { success: false, error: err.message };
     }
   });
