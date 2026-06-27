@@ -57,6 +57,11 @@ class Store {
         updated_at  INTEGER NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+
       CREATE INDEX IF NOT EXISTS idx_conversations_project_id ON conversations(project_id);
       CREATE INDEX IF NOT EXISTS idx_conversations_updated_at ON conversations(updated_at);
       CREATE INDEX IF NOT EXISTS idx_feishu_bindings_jsonl ON feishu_bindings(jsonl_path);
@@ -421,6 +426,23 @@ class Store {
     // Mark migration as done
     this.db.pragma('main.user_version = 1');
     return result.changes;
+  }
+
+  // ── App settings (KV) ────────────────────────────────────────
+  // Lightweight generic key/value store for app-level preferences that the main
+  // process must read at startup (e.g. frostedGlass → window vibrancy/material).
+  getAppSetting(key, fallback = null) {
+    const row = this.db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key);
+    if (row == null) return fallback;
+    return row.value;
+  }
+
+  setAppSetting(key, value) {
+    this.db.prepare(`
+      INSERT INTO app_settings (key, value)
+      VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `).run(key, String(value));
   }
 
   close() {

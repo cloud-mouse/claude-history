@@ -108,6 +108,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useProjectsStore } from './stores/projects';
 import { useConversationsStore } from './stores/conversations';
 import { useThemeStore } from './stores/theme';
+import { useAppearanceStore } from './stores/appearance';
 import ProjectList from './components/layout/ProjectList.vue';
 import ConversationList from './components/layout/ConversationList.vue';
 import MessageThread from './components/layout/MessageThread.vue';
@@ -120,6 +121,7 @@ import { useStatsStore } from './stores/stats';
 const projectsStore = useProjectsStore();
 const conversationsStore = useConversationsStore();
 const themeStore = useThemeStore();
+const appearanceStore = useAppearanceStore();
 const feishuStore = useFeishuStore();
 const updateStore = useUpdateStore();
 const statsStore = useStatsStore();
@@ -230,6 +232,7 @@ const _unsubs = [];
 
 onMounted(() => {
   themeStore.initTheme();
+  appearanceStore.init();
   projectsStore.loadProjects();
   feishuStore.detect();
 
@@ -324,6 +327,7 @@ onUnmounted(() => {
 
 .panel-right {
   flex: 1;
+  background: var(--bg-panel);
 }
 
 .app-header {

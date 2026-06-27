@@ -255,8 +255,36 @@
 }
 
 /* macOS vibrancy: transparent window base so the semi-transparent side panels
-   reveal the native frosted glass. Non-mac keeps the opaque fallback. */
-[data-platform="darwin"] html,
-[data-platform="darwin"] body {
+   reveal the native frosted glass. Non-mac keeps the opaque fallback.
+   NOTE: `data-platform` is set on <html> itself (see main.js), so the selector
+   must target `html[data-platform=...]` directly — a descendant selector like
+   `[data-platform=...] html` would never match (<html> has no ancestor). */
+html[data-platform="darwin"],
+html[data-platform="darwin"] body {
   background-color: transparent;
+}
+
+/* ── Frosted glass OFF: opaque panel overrides per theme ───────────
+   When the user disables frosted glass, the semi-transparent --bg-panel
+   (which is what makes the native material show through) must be replaced
+   with a fully opaque theme base color, otherwise the still-transparent
+   window base would leak the desktop. These overrides ride on the
+   `html[data-frosted="off"]` attribute set by the appearance store. */
+html[data-frosted="off"][data-theme="light"]   { --bg-panel: #F8FAFC; }
+html[data-frosted="off"][data-theme="dark"]    { --bg-panel: #161616; }
+html[data-frosted="off"][data-theme="warm"]    { --bg-panel: #FEF7ED; }
+html[data-frosted="off"][data-theme="monokai"] { --bg-panel: #1E1F1C; }
+
+/* Default theme when no data-theme is set yet (light is the :root default). */
+html[data-frosted="off"]:not([data-theme])     { --bg-panel: #F8FAFC; }
+
+/* macOS OFF state: the rule above unconditionally makes darwin html/body
+   transparent (needed for vibrancy to show). When frosted glass is OFF the
+   window base would still be transparent → desktop would leak through. Restore
+   an opaque body background here. Using var(--bg-panel) (which the overrides
+   above have just turned into a solid theme color) keeps the window base and
+   the three panels (incl. divider gaps) the exact same color — seamless. */
+html[data-platform="darwin"][data-frosted="off"],
+html[data-platform="darwin"][data-frosted="off"] body {
+  background-color: var(--bg-panel);
 }

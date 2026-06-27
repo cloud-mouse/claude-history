@@ -22,6 +22,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   resumeConversation: (filePath, projectDir) => ipcRenderer.invoke('resume-conversation', filePath, projectDir),
   openProjectWith: (tool, projectDir) => ipcRenderer.invoke('open-project-with', tool, projectDir),
 
+  // Appearance — frosted glass toggle (main process owns the native material)
+  getFrostedGlass: () => ipcRenderer.invoke('appearance:getFrostedGlass'),
+  setFrostedGlass: (enabled) => ipcRenderer.invoke('appearance:setFrostedGlass', enabled),
+
   // Feishu bridge API
   feishuGetStatus: () => ipcRenderer.invoke('feishu:getStatus'),
   feishuGetConfig: () => ipcRenderer.invoke('feishu:getConfig'),

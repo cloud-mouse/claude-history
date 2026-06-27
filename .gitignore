@@ -18,6 +18,7 @@ npm-debug.log*
 .codex/
 .cursor/
 .trellis/
+docs/
 AGENTS.md
 
 # Lock files (use pnpm-lock.yaml instead)

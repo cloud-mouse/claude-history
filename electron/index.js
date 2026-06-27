@@ -8,8 +8,37 @@ const { initUpdater, registerUpdaterIpc, isForceRestart, checkForUpdates } = req
 let mainWindow;
 let feishuBridge = null;
 
+/**
+ * Apply (or re-apply) the native frosted-glass material to a BrowserWindow
+ * based on the user's frostedGlass preference. Called once at createWindow()
+ * and again on every `appearance:setFrostedGlass` IPC for live toggling.
+ *
+ * - macOS:     `setVibrancy('under-window' | null)`. vibrancy paints under the
+ *              web content, so the renderer must keep its window base transparent
+ *              (see windowOptions.backgroundColor below + variables.css).
+ * - Windows:   `setBackgroundMaterial('acrylic' | 'none')` (Win11; Win10 no-op).
+ * - Linux:     no-op (no native equivalent).
+ *
+ * Note: `visualEffectState: 'active'` is a BrowserWindow *constructor* option
+ * (set once in createWindow); there is no live setter, so we don't touch it here.
+ */
+function applyFrostedGlass(win, enabled, platform) {
+  if (!win || win.isDestroyed()) return;
+  if (platform === 'darwin') {
+    win.setVibrancy(enabled ? 'under-window' : null);
+  } else if (platform === 'win32') {
+    win.setBackgroundMaterial(enabled ? 'acrylic' : 'none');
+  }
+  // linux: no-op
+}
+
 function createWindow() {
   const isMac = process.platform === 'darwin';
+  const platform = process.platform;
+  const store = getStore();
+  // Default to ON (matches ADR-0002): no row yet → true.
+  const frostedEnabled = store.getAppSetting('frostedGlass', '1') !== '0';
+
   const windowOptions = {
     width: 1200,
     height: 800,
@@ -23,11 +52,21 @@ function createWindow() {
     }
   };
   // macOS: native vibrancy so the semi-transparent side panels show frosted glass.
+  // The fully-transparent window backgroundColor is the missing root-cause fix —
+  // without it the default opaque white window base occludes the vibrancy layer.
   if (isMac) {
-    windowOptions.vibrancy = 'under-window';
+    windowOptions.backgroundColor = '#00000000';
     windowOptions.visualEffectState = 'active';
+    if (frostedEnabled) windowOptions.vibrancy = 'under-window';
   }
   mainWindow = new BrowserWindow(windowOptions);
+
+  // Win32: apply acrylic material post-construction (constructor-level config
+  // only accepts 'auto' / 'none' / 'mica' / 'acrylic' on some Electron builds,
+  // but setBackgroundMaterial is the reliable live API). Initial state set here.
+  if (platform === 'win32') {
+    applyFrostedGlass(mainWindow, frostedEnabled, platform);
+  }
 
   // H4: defense-in-depth against phishing/navigation hijacking. Any external
   // http(s) link opened from rendered markdown is handed to the OS browser;
@@ -67,6 +106,21 @@ function createWindow() {
   // Register IPC handlers after window creation
   registerIpcHandlers();
 
+  // Appearance IPC (frosted glass toggle). Registered here in index.js because
+  // the `set` handler needs the live mainWindow reference to apply the native
+  // material immediately (no restart). The shared store is reached via getStore().
+  ipcMain.handle('appearance:getFrostedGlass', () => {
+    const s = getStore();
+    // Missing row → default ON (true).
+    return s.getAppSetting('frostedGlass', '1') !== '0';
+  });
+  ipcMain.handle('appearance:setFrostedGlass', (_event, enabled) => {
+    const s = getStore();
+    const value = enabled ? '1' : '0';
+    s.setAppSetting('frostedGlass', value);
+    applyFrostedGlass(mainWindow, !!enabled, process.platform);
+  });
+
   // Initialize auto-updater (only in production builds)
   if (!isDev) {
     initUpdater(mainWindow);
@@ -74,7 +128,6 @@ function createWindow() {
   }
 
   // Initialize Feishu bridge
-  const store = getStore();
   feishuBridge = new FeishuBridge(store, mainWindow);
   registerFeishuIpc(ipcMain, feishuBridge, store);
 
