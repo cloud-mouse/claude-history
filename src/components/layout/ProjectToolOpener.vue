@@ -9,7 +9,10 @@
         :title="mainTitle"
         @click="onMainClick"
       >
-        <span v-if="selectedTool" class="tool-icon" v-html="selectedTool.icon"></span>
+        <span v-if="selectedTool" class="tool-icon">
+          <img v-if="selectedTool.iconType === 'img'" :src="selectedTool.icon" class="tool-icon-img" alt="" />
+          <span v-else class="tool-icon-svg" v-html="selectedTool.icon"></span>
+        </span>
         <svg v-else class="open-glyph" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M14 4h6v6"></path>
           <path d="M20 4l-9 9"></path>
@@ -39,7 +42,10 @@
           :class="{ selected: selectedTool?.id === t.id }"
           @click="selectTool(t)"
         >
-          <span class="tool-icon" v-html="t.icon"></span>
+          <span class="tool-icon">
+            <img v-if="t.iconType === 'img'" :src="t.icon" class="tool-icon-img" alt="" />
+            <span v-else class="tool-icon-svg" v-html="t.icon"></span>
+          </span>
           <span class="tool-name">{{ t.name }}</span>
           <svg v-if="selectedTool?.id === t.id" class="check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="20 6 9 17 4 12"></polyline>
@@ -57,32 +63,22 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import cursorIcon from '../../assets/icons/cursor.svg';
+import vscodeIcon from '../../assets/icons/vscode.svg';
+import intellijIcon from '../../assets/icons/intellij.svg';
 
 const STORAGE_KEY = 'project-opener:last-tool';
 
+// Terminal has no brand asset; keep its hand-drawn glyph as an inline SVG string.
+const TERMINAL_ICON_SVG = `<svg viewBox="0 0 24 24" width="16" height="16"><rect width="24" height="24" rx="5" fill="#3A3A3A"/><path d="M7 9l3 3-3 3M13 15h4" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
 // Fixed tool roster — not configurable (per stage-1 scope).
-// Each icon is a brand-tinted rounded square + white glyph, rendered via v-html.
+// Brand tools load their official logo via <img>; terminal keeps the inline glyph.
 const TOOLS = [
-  {
-    id: 'cursor',
-    name: 'Cursor',
-    icon: `<svg viewBox="0 0 24 24" width="16" height="16"><rect width="24" height="24" rx="5" fill="#6E56CF"/><path d="M7 4l10 7-4.5 1L15.5 18l-2 .9L11 13.5 7 15.5V4z" fill="#fff"/></svg>`,
-  },
-  {
-    id: 'vscode',
-    name: 'VS Code',
-    icon: `<svg viewBox="0 0 24 24" width="16" height="16"><rect width="24" height="24" rx="5" fill="#0078D4"/><path d="M9 9l-3 3 3 3M15 9l3 3-3 3M14 6l-4 12" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-  },
-  {
-    id: 'idea',
-    name: 'IntelliJ IDEA',
-    icon: `<svg viewBox="0 0 24 24" width="16" height="16"><rect width="24" height="24" rx="5" fill="#FF6B00"/><text x="12" y="16" font-family="-apple-system,Segoe UI,sans-serif" font-size="8.5" font-weight="700" text-anchor="middle" fill="#fff">IJ</text></svg>`,
-  },
-  {
-    id: 'terminal',
-    name: '终端',
-    icon: `<svg viewBox="0 0 24 24" width="16" height="16"><rect width="24" height="24" rx="5" fill="#3A3A3A"/><path d="M7 9l3 3-3 3M13 15h4" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-  },
+  { id: 'cursor', name: 'Cursor', iconType: 'img', icon: cursorIcon },
+  { id: 'vscode', name: 'VS Code', iconType: 'img', icon: vscodeIcon },
+  { id: 'idea', name: 'IntelliJ IDEA', iconType: 'img', icon: intellijIcon },
+  { id: 'terminal', name: '终端', iconType: 'svg', icon: TERMINAL_ICON_SVG },
 ];
 
 const props = defineProps({
@@ -231,6 +227,13 @@ function showError(msg) {
 
 .tool-icon :deep(svg) {
   display: block;
+}
+
+.tool-icon-img {
+  width: 16px;
+  height: 16px;
+  display: block;
+  object-fit: contain;
 }
 
 .open-glyph {

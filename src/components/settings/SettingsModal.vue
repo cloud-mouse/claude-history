@@ -71,7 +71,7 @@ watch(() => props.show, (v) => {
 }
 .settings-modal {
   background: var(--bg-primary); color: var(--text-primary);
-  border-radius: var(--radius-card); width: 680px; max-width: 92vw; max-height: 85vh;
+  border-radius: var(--radius-card); width: 780px; max-width: 92vw; height: 70vh;
   display: flex; flex-direction: column; overflow: hidden;
   box-shadow: var(--shadow-lg);
 }

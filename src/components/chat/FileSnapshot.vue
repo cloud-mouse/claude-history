@@ -1,13 +1,20 @@
 <template>
-  <div class="file-snapshot">
-    <button class="toggle-btn" @click="expanded = !expanded">
-      <span class="toggle-icon">{{ expanded ? '▼' : '▼' }}</span>
-      <span class="summary">{{ summaryText }}</span>
-    </button>
-    <div v-if="expanded" class="file-list">
+  <CollapsibleBlock
+    name="文件"
+    :summary="summaryText"
+    :status="totalFiles > 0 ? String(totalFiles) : ''"
+    :default-expanded="totalFiles < 3"
+  >
+    <template #icon>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+      </svg>
+    </template>
+    <div class="file-list">
       <div v-if="createdFiles.length > 0" class="file-group">
         <div class="group-header">
-          <span class="group-label created">Created</span>
+          <span class="group-label created">新建</span>
           <span class="group-count">{{ createdFiles.length }}</span>
         </div>
         <div v-for="file in createdFiles" :key="file.path" class="file-item">
@@ -17,7 +24,7 @@
       </div>
       <div v-if="modifiedFiles.length > 0" class="file-group">
         <div class="group-header">
-          <span class="group-label modified">Modified</span>
+          <span class="group-label modified">修改</span>
           <span class="group-count">{{ modifiedFiles.length }}</span>
         </div>
         <div v-for="file in modifiedFiles" :key="file.path" class="file-item">
@@ -27,7 +34,7 @@
       </div>
       <div v-if="deletedFiles.length > 0" class="file-group">
         <div class="group-header">
-          <span class="group-label deleted">Deleted</span>
+          <span class="group-label deleted">删除</span>
           <span class="group-count">{{ deletedFiles.length }}</span>
         </div>
         <div v-for="file in deletedFiles" :key="file.path" class="file-item">
@@ -36,20 +43,16 @@
         </div>
       </div>
     </div>
-  </div>
+  </CollapsibleBlock>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { computed } from 'vue';
+import CollapsibleBlock from '../common/CollapsibleBlock.vue';
 
 const props = defineProps({
-  blocks: {
-    type: Object,
-    required: true
-  }
+  blocks: { type: Object, required: true }
 });
-
-const expanded = ref(false);
 
 const fileSnapshots = computed(() => {
   // Extract file snapshots from message.files (set by message-parser)
@@ -79,62 +82,20 @@ const deletedFiles = computed(() =>
 );
 
 const summaryText = computed(() => {
-  // Show expanded if less than 3 files
-  if (totalFiles.value < 3) {
-    expanded.value = true;
-    return `Files: ${totalFiles.value}`;
-  }
   const created = createdFiles.value.length;
   const modified = modifiedFiles.value.length;
   const deleted = deletedFiles.value.length;
   const parts = [];
-  if (created > 0) parts.push(`${created} created`);
-  if (modified > 0) parts.push(`${modified} modified`);
-  if (deleted > 0) parts.push(`${deleted} deleted`);
-  return `Files: ${parts.join(', ')}`;
+  if (created > 0) parts.push(`${created} 新建`);
+  if (modified > 0) parts.push(`${modified} 修改`);
+  if (deleted > 0) parts.push(`${deleted} 删除`);
+  if (parts.length > 0) return parts.join(', ');
+  return totalFiles.value > 0 ? `${totalFiles.value} 个文件` : '';
 });
 </script>
 
 <style scoped>
-.file-snapshot {
-  margin-top: 8px;
-  border-radius: var(--radius-card);
-  overflow: hidden;
-  background-color: var(--bg-secondary);
-}
-
-.toggle-btn {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background-color: var(--bg-tertiary);
-  border: none;
-  cursor: pointer;
-  font-family: var(--font-sans);
-  font-size: var(--font-size-sm);
-  color: var(--text-primary);
-  text-align: left;
-  transition: background var(--transition-fast);
-}
-
-.toggle-btn:hover {
-  background-color: var(--surface-hover);
-}
-
-.toggle-icon {
-  font-size: 10px;
-  color: var(--text-muted);
-}
-
-.summary {
-  color: var(--text-secondary);
-}
-
 .file-list {
-  padding: 12px;
-  background-color: var(--bg-primary);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -161,20 +122,9 @@ const summaryText = computed(() => {
   border-radius: var(--radius-control);
 }
 
-.group-label.created {
-  background-color: var(--success-bg);
-  color: var(--success);
-}
-
-.group-label.modified {
-  background-color: var(--accent-bg);
-  color: var(--accent);
-}
-
-.group-label.deleted {
-  background-color: var(--danger-bg);
-  color: var(--danger);
-}
+.group-label.created { background-color: var(--success-bg); color: var(--success); }
+.group-label.modified { background-color: var(--accent-bg); color: var(--accent); }
+.group-label.deleted { background-color: var(--danger-bg); color: var(--danger); }
 
 .group-count {
   font-size: var(--font-size-xs);
@@ -199,22 +149,12 @@ const summaryText = computed(() => {
   border-radius: var(--radius-control);
   font-weight: bold;
   font-size: 12px;
+  flex-shrink: 0;
 }
 
-.action-badge.created {
-  background-color: var(--success-bg);
-  color: var(--success);
-}
-
-.action-badge.modified {
-  background-color: var(--accent-bg);
-  color: var(--accent);
-}
-
-.action-badge.deleted {
-  background-color: var(--danger-bg);
-  color: var(--danger);
-}
+.action-badge.created { background-color: var(--success-bg); color: var(--success); }
+.action-badge.modified { background-color: var(--accent-bg); color: var(--accent); }
+.action-badge.deleted { background-color: var(--danger-bg); color: var(--danger); }
 
 .file-path {
   color: var(--text-primary);
