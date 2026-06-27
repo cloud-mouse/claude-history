@@ -1,46 +1,37 @@
 <template>
-  <div class="task-output-block">
-    <div class="output-header">
-      <span class="output-icon">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="4 17 10 11 4 5"></polyline>
-          <line x1="12" y1="19" x2="20" y2="19"></line>
-        </svg>
-      </span>
-      <span class="output-label">TaskOutput</span>
-      <span v-if="block" class="block-badge">等待中</span>
-      <span class="timeout-badge">{{ formattedTimeout }}</span>
-    </div>
-    <div v-if="taskId" class="output-content">
-      <span class="task-id-label">Task</span>
+  <CollapsibleBlock ref="blockRef" name="TaskOutput" :summary="taskId" :status="outputStatus">
+    <template #icon>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="4 17 10 11 4 5"></polyline>
+        <line x1="12" y1="19" x2="20" y2="19"></line>
+      </svg>
+    </template>
+    <div v-if="taskId" class="output-fields">
+      <span class="task-id-label">任务</span>
       <code class="task-id-value">{{ taskId }}</code>
     </div>
-  </div>
+  </CollapsibleBlock>
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { ref, computed } from 'vue';
+import CollapsibleBlock from '../common/CollapsibleBlock.vue';
 
 const props = defineProps({
-  block: {
-    type: Object,
-    required: true
-  }
+  block: { type: Object, required: true }
 });
+
+const blockRef = ref(null);
 
 const input = computed(() => {
   if (typeof props.block.input === 'string') {
-    try {
-      return JSON.parse(props.block.input);
-    } catch {
-      return {};
-    }
+    try { return JSON.parse(props.block.input); } catch { return {}; }
   }
   return props.block.input || {};
 });
 
 const taskId = computed(() => input.value.task_id || '');
-const block = computed(() => input.value.block === true);
+const isBlocking = computed(() => input.value.block === true);
 const timeout = computed(() => input.value.timeout || 0);
 
 const formattedTimeout = computed(() => {
@@ -51,67 +42,19 @@ const formattedTimeout = computed(() => {
   return `${ms}ms`;
 });
 
-function expandAll() {}
-function collapseAll() {}
+const outputStatus = computed(() => {
+  if (isBlocking.value) return '等待中';
+  return formattedTimeout.value;
+});
+
+function expandAll() { blockRef.value?.expandAll(); }
+function collapseAll() { blockRef.value?.collapseAll(); }
 
 defineExpose({ expandAll, collapseAll });
 </script>
 
 <style scoped>
-.task-output-block {
-  margin-top: 8px;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background-color: var(--bg-secondary);
-}
-
-.output-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background-color: var(--bg-tertiary);
-}
-
-.output-icon {
-  display: flex;
-  align-items: center;
-  color: var(--text-secondary);
-}
-
-.output-label {
-  font-weight: 600;
-  font-size: var(--font-size-sm);
-  color: var(--text-primary);
-}
-
-.block-badge {
-  font-size: var(--font-size-xs);
-  font-weight: 500;
-  color: var(--warning);
-  background: var(--warning-bg);
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  animation: pulse 2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
-}
-
-.timeout-badge {
-  font-size: var(--font-size-xs);
-  color: var(--text-muted);
-  background: var(--bg-primary);
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  margin-left: auto;
-}
-
-.output-content {
-  padding: 8px 12px;
+.output-fields {
   display: flex;
   align-items: center;
   gap: 8px;

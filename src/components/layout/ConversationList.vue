@@ -23,12 +23,11 @@
           </div>
           <div class="conv-footer">
             <span class="conv-date">{{ formatDate(conv.updatedAt) }}</span>
-            <button class="delete-btn" @click.stop="confirmDelete(conv)" title="删除">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="3 6 5 6 21 6"/>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-              </svg>
-            </button>
+            <DropdownMenu
+              :items="menuItems(conv)"
+              trigger-title="会话操作"
+              @select="(key) => onMenuSelect(conv, key)"
+            />
           </div>
         </li>
       </ul>
@@ -42,16 +41,26 @@
       @confirm="handleDelete"
       @cancel="showDeleteConfirm = false"
     />
+
+    <transition name="toast">
+      <div v-if="toast" class="conv-toast" :class="toast.success ? 'success' : 'error'">
+        {{ toast.message }}
+      </div>
+    </transition>
   </div>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue';
 import { cleanTitle } from '../../utils/title-extractor.js';
+import { resolveProjectDir } from '../../utils/project-path.js';
+import { buildResumeCommand } from '../../utils/conversation-resume.js';
 import { useConversationsStore } from '../../stores/conversations.js';
 import SearchBar from '../common/SearchBar.vue';
 import ConfirmDialog from '../common/ConfirmDialog.vue';
+import DropdownMenu from '../common/DropdownMenu.vue';
 import { useFeishuStore } from '../../stores/feishu';
+
 const feishuStore = useFeishuStore();
 
 const conversationsStore = useConversationsStore();
@@ -67,6 +76,8 @@ const emit = defineEmits(['select', 'search', 'delete']);
 const searchQuery = ref('');
 const showDeleteConfirm = ref(false);
 const pendingDelete = ref(null);
+const toast = ref(null); // { message: string, success: boolean }
+let toastTimer = null;
 
 function handleSearch(query) {
   searchQuery.value = query;
@@ -74,6 +85,50 @@ function handleSearch(query) {
 
 function onSelect(conv) {
   emit('select', conv);
+}
+
+// --- Per-conversation context menu (4 actions) ---
+
+function menuItems(conv) {
+  const bound = feishuStore.isBound(conv.filePath);
+  return [
+    {
+      key: 'bind',
+      label: bound ? '解除绑定' : '绑定到飞书',
+      disabled: !feishuStore.connected,
+      disabledHint: '请先在设置中连接飞书桥接'
+    },
+    { key: 'resume', label: '恢复会话' },
+    { key: 'copy', label: '复制恢复命令' },
+    { key: 'delete', label: '删除会话', danger: true }
+  ];
+}
+
+async function onMenuSelect(conv, key) {
+  if (key === 'bind') {
+    // Singleton semantics (ADR-0001): binding replaces the previous binding.
+    // Toggle directly — no confirmation — with a toast for feedback.
+    if (feishuStore.isBound(conv.filePath)) {
+      await feishuStore.unbind();
+      showToast('已解除绑定', true);
+    } else {
+      const r = await feishuStore.bindSession(conv.filePath);
+      showToast(r.success ? (r.message || '已绑定到飞书') : (r.error || '绑定失败'), r.success);
+    }
+  } else if (key === 'resume') {
+    window.electronAPI.resumeConversation(conv.filePath, resolveProjectDir(conv));
+  } else if (key === 'copy') {
+    navigator.clipboard.writeText(buildResumeCommand(conv))
+      .then(() => showToast('已复制恢复命令', true));
+  } else if (key === 'delete') {
+    confirmDelete(conv);
+  }
+}
+
+function showToast(message, success) {
+  toast.value = { message, success };
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toast.value = null; }, 4000);
 }
 
 function confirmDelete(conv) {
@@ -122,6 +177,7 @@ function formatDate(timestamp) {
 
 <style scoped>
 .conversation-list {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -154,10 +210,6 @@ function formatDate(timestamp) {
 
 .conversation-item:hover {
   background: var(--surface-hover);
-}
-
-.conversation-item:hover .delete-btn {
-  opacity: 1;
 }
 
 .conversation-item.active {
@@ -224,28 +276,18 @@ function formatDate(timestamp) {
   opacity: 0.6;
 }
 
-.delete-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-control);
-  color: var(--text-muted);
-  cursor: pointer;
+/* Reveal the per-row menu trigger on hover / active row (mirrors the old
+   delete-btn reveal behavior). */
+.conversation-item :deep(.dropdown-trigger) {
   opacity: 0;
-  transition: all var(--transition-fast);
+  transition: opacity var(--transition-fast);
 }
-
-.conversation-item.active .delete-btn {
+.conversation-item:hover :deep(.dropdown-trigger),
+.conversation-item.active :deep(.dropdown-trigger) {
   opacity: 0.6;
 }
-
-.delete-btn:hover {
-  color: var(--danger);
-  background: var(--danger-bg);
+.conversation-item :deep(.dropdown-trigger:hover),
+.conversation-item :deep(.dropdown-trigger.is-open) {
   opacity: 1;
 }
 
@@ -258,5 +300,32 @@ function formatDate(timestamp) {
 
 .empty-state p {
   margin: 0;
+}
+
+/* Inline toast for bind / copy feedback. */
+.conv-toast {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  padding: 8px 16px;
+  border-radius: var(--radius-control);
+  font-size: var(--font-size-sm);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-md);
+  z-index: 20;
+  pointer-events: none;
+}
+.conv-toast.success { color: var(--success); border-color: var(--success); }
+.conv-toast.error { color: var(--danger); border-color: var(--danger); }
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 8px);
 }
 </style>

@@ -21,43 +21,11 @@
             飞书 {{ feishuStore.processing ? '活跃' : '空闲' }}
           </span>
         </div>
-        <div v-if="remoteSession" class="session-bind-info">
-          <span class="bind-icon">🔗</span>
-          <span class="bind-text">绑定会话: <code>{{ sessionIdShort }}</code></span>
-        </div>
         <div class="thread-header-left">
-          <button v-if="canBindToFeishu" class="bind-btn" @click="bindToFeishu" :disabled="binding" :title="bindTooltip">
-            <span class="bind-btn-icon">🐦</span>
-            {{ binding ? '绑定中...' : (remoteSession ? '已绑定' : '绑定到飞书') }}
-          </button>
-          <span v-if="bindResult" :class="['bind-feedback', bindResult.success ? 'success' : 'error']">
-            {{ bindResult.success ? '✓' : '✗' }} {{ bindResult.message }}
-          </span>
-          <button class="resume-btn" @click="resumeConversation" title="在终端中恢复会话">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="5 3 19 12 5 21 5 3"></polygon>
-            </svg>
-            恢复会话
-          </button>
           <button class="expand-btn" @click="toggleAll">
             {{ allExpanded ? '收起全部' : '展开全部' }}
           </button>
           <ProjectToolOpener :project-dir="projectDir" />
-        </div>
-      </div>
-
-      <div class="session-command-bar">
-        <div class="session-command" @click="copyCommand">
-          <code>{{ resumeCommand }}</code>
-          <button class="copy-btn" :class="{ copied: commandCopied }">
-            <svg v-if="!commandCopied" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-            </svg>
-            <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="20 6 9 17 4 12"></polyline>
-            </svg>
-          </button>
         </div>
       </div>
 
@@ -129,16 +97,7 @@ const feishuStore = useFeishuStore();
 const messagesContainer = ref(null);
 const allExpanded = ref(false);
 const bubbleRefs = ref({});
-const commandCopied = ref(false);
 const showBackToTop = ref(false);
-
-// Build resume command
-const resumeCommand = computed(() => {
-  if (!props.conversation?.filePath) return '';
-  const fileName = props.conversation.filePath.split('/').pop().replace('.jsonl', '');
-  const projectDir = props.conversation.projectDir || props.conversation.filePath.split('/').slice(0, -1).join('/');
-  return `cd "${projectDir}" && claude --resume ${fileName}`;
-});
 
 // Real working directory for the active conversation. Preferred source is the cwd
 // recorded in the JSONL (conversation.projectDir); we fall back to decoding the
@@ -179,24 +138,6 @@ const conversationTime = computed(() => {
   });
 });
 
-// Resume conversation in terminal
-function resumeConversation() {
-  if (props.conversation?.filePath) {
-    window.electronAPI.resumeConversation(props.conversation.filePath, props.conversation.projectDir);
-  }
-}
-
-// Copy resume command
-function copyCommand() {
-  const cmd = resumeCommand.value;
-  navigator.clipboard.writeText(cmd).then(() => {
-    commandCopied.value = true;
-    setTimeout(() => {
-      commandCopied.value = false;
-    }, 2000);
-  });
-}
-
 const messages = computed(() => {
   if (!props.conversation || !props.conversation.messages) {
     return [];
@@ -210,56 +151,12 @@ const messageCount = computed(() => {
   ).length;
 });
 
+// The active conversation is the bound one when the Feishu binding points at it.
+// Drives the compact "飞书 活跃/空闲" capsule (only shown for bound conversations).
 const remoteSession = computed(() => {
   if (!props.conversation?.filePath) return null;
   return feishuStore.binding?.jsonlPath === props.conversation.filePath ? feishuStore.binding : null;
 });
-
-const sessionIdShort = computed(() => {
-  if (!remoteSession.value?.sessionId) return '';
-  const id = remoteSession.value.sessionId;
-  return id.length > 16 ? id.slice(0, 8) + '...' + id.slice(-8) : id;
-});
-
-// Extract the agent session ID from the JSONL file path
-const agentSessionId = computed(() => {
-  if (!props.conversation?.filePath) return null;
-  const fileName = props.conversation.filePath.split('/').pop();
-  return fileName?.replace('.jsonl', '') || null;
-});
-
-// Can bind to Feishu: Feishu is connected and session ID exists
-const canBindToFeishu = computed(() => {
-  return feishuStore.connected && agentSessionId.value;
-});
-
-const bindTooltip = computed(() => {
-  if (!feishuStore.connected) return '请先在设置中启用飞书桥接';
-  if (remoteSession.value) return '此会话已绑定到飞书远程会话';
-  return '将此会话绑定到飞书，下次飞书消息将进入此会话';
-});
-
-const binding = ref(false);
-const bindResult = ref(null); // { success: boolean, message: string }
-
-async function bindToFeishu() {
-  if (!agentSessionId.value || binding.value) return;
-  binding.value = true;
-  bindResult.value = null;
-  try {
-    const result = await feishuStore.bindSession(props.conversation.filePath);
-    if (result.success) {
-      bindResult.value = { success: true, message: result.message || '已绑定到飞书' };
-    } else {
-      bindResult.value = { success: false, message: result.error || '绑定失败' };
-    }
-  } catch (err) {
-    bindResult.value = { success: false, message: err.message || '绑定失败' };
-  } finally {
-    binding.value = false;
-    setTimeout(() => { bindResult.value = null; }, 4000);
-  }
-}
 
 function setBubbleRef(index, el) {
   if (el) {
@@ -303,7 +200,6 @@ function normalizeContent(content) {
 watch(() => props.conversation, () => {
   bubbleRefs.value = {};
   allExpanded.value = false;
-  commandCopied.value = false;
   showBackToTop.value = false;
 });
 
@@ -412,25 +308,6 @@ function scrollToTop() {
   flex-shrink: 0;
 }
 
-.resume-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  color: white;
-  background: var(--primary);
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.resume-btn:hover {
-  background: var(--primary-hover);
-}
-
 .expand-btn {
   padding: 6px 12px;
   font-size: var(--font-size-xs);
@@ -451,58 +328,6 @@ function scrollToTop() {
 .expand-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.session-command-bar {
-  display: flex;
-  align-items: center;
-  padding: 0 24px 14px;
-}
-
-.session-command {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-card);
-  padding: 6px 10px;
-  cursor: pointer;
-  transition: background var(--transition-fast);
-}
-
-.session-command:hover {
-  background: var(--surface-hover);
-}
-
-.session-command code {
-  font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
-  color: var(--text-primary);
-  white-space: nowrap;
-}
-
-.copy-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.copy-btn:hover {
-  color: var(--text-primary);
-  background: var(--surface-hover);
-}
-
-.copy-btn.copied {
-  color: var(--success);
 }
 
 .thread-messages {
@@ -554,7 +379,7 @@ function scrollToTop() {
   opacity: 0;
 }
 
-/* Remote session badge */
+/* Feishu status capsule — only for the bound conversation. */
 .remote-badge {
   display: inline-flex;
   align-items: center;
@@ -564,6 +389,7 @@ function scrollToTop() {
   border-radius: var(--radius-full);
   font-weight: 500;
   margin-left: 8px;
+  width: fit-content;
 }
 
 .remote-badge.active {
@@ -590,79 +416,5 @@ function scrollToTop() {
 
 .status-dot-inline.yellow {
   background: var(--warning);
-}
-
-/* Session bind info */
-.session-bind-info {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: var(--font-size-xs);
-  color: var(--text-muted);
-  margin-left: 8px;
-  margin-top: 2px;
-}
-
-.bind-icon {
-  font-size: 12px;
-}
-
-.bind-text code {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  background: var(--bg-tertiary);
-  padding: 1px 4px;
-  border-radius: var(--radius-control);
-}
-
-/* Bind to Feishu button */
-.bind-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 12px;
-  background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs);
-  font-family: inherit;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  white-space: nowrap;
-}
-
-.bind-btn:hover:not(:disabled) {
-  background: var(--surface-hover);
-  color: var(--text-primary);
-  border-color: var(--border-color);
-}
-
-.bind-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.bind-btn-icon {
-  font-size: 13px;
-}
-
-.bind-feedback {
-  font-size: var(--font-size-xs);
-  font-weight: 500;
-  animation: fadeIn 0.3s ease;
-}
-
-.bind-feedback.success {
-  color: var(--success);
-}
-
-.bind-feedback.error {
-  color: var(--danger);
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
 }
 </style>

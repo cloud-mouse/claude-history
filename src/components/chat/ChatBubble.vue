@@ -50,17 +50,17 @@
             图片
           </span>
         </div>
-        <TaskCreateBlock v-if="block.type === 'tool_use' && block.name === 'TaskCreate'" :block="block" />
-        <TaskUpdateBlock v-else-if="block.type === 'tool_use' && (block.name === 'TaskUpdate' || block.toolName === 'TaskUpdate')" :block="block" />
+        <TaskCreateBlock v-if="block.type === 'tool_use' && block.name === 'TaskCreate'" :block="block" :ref="el => setChildRef('taskcreate_' + i, el)" />
+        <TaskUpdateBlock v-else-if="block.type === 'tool_use' && (block.name === 'TaskUpdate' || block.toolName === 'TaskUpdate')" :block="block" :ref="el => setChildRef('taskupdate_' + i, el)" />
         <AgentToolBlock v-else-if="block.type === 'tool_use' && (block.name === 'Agent' || block.toolName === 'Agent')" :block="block" :ref="el => setChildRef('agent_' + i, el)" />
-        <TodoWriteBlock v-else-if="block.type === 'tool_use' && (block.name === 'TodoWrite' || block.toolName === 'TodoWrite')" :block="block" />
+        <TodoWriteBlock v-else-if="block.type === 'tool_use' && (block.name === 'TodoWrite' || block.toolName === 'TodoWrite')" :block="block" :ref="el => setChildRef('todo_' + i, el)" />
         <WriteToolBlock v-else-if="block.type === 'tool_use' && block.name === 'Write'" :block="block" :ref="el => setChildRef('write_' + i, el)" />
         <EditToolBlock v-else-if="block.type === 'tool_use' && block.name === 'Edit'" :block="block" :ref="el => setChildRef('edit_' + i, el)" />
         <ReadToolBlock v-else-if="block.type === 'tool_use' && block.name === 'Read'" :block="block" :ref="el => setChildRef('read_' + i, el)" />
-        <GlobToolBlock v-else-if="block.type === 'tool_use' && block.name === 'Glob'" :block="block" />
-        <GrepToolBlock v-else-if="block.type === 'tool_use' && block.name === 'Grep'" :block="block" />
-        <AskUserQuestionBlock v-else-if="block.type === 'tool_use' && (block.name === 'AskUserQuestion' || block.toolName === 'AskUserQuestion')" :block="block" />
-        <TaskOutputBlock v-else-if="block.type === 'tool_use' && (block.name === 'TaskOutput' || block.toolName === 'TaskOutput')" :block="block" />
+        <GlobToolBlock v-else-if="block.type === 'tool_use' && block.name === 'Glob'" :block="block" :ref="el => setChildRef('glob_' + i, el)" />
+        <GrepToolBlock v-else-if="block.type === 'tool_use' && block.name === 'Grep'" :block="block" :ref="el => setChildRef('grep_' + i, el)" />
+        <AskUserQuestionBlock v-else-if="block.type === 'tool_use' && (block.name === 'AskUserQuestion' || block.toolName === 'AskUserQuestion')" :block="block" :ref="el => setChildRef('ask_' + i, el)" />
+        <TaskOutputBlock v-else-if="block.type === 'tool_use' && (block.name === 'TaskOutput' || block.toolName === 'TaskOutput')" :block="block" :ref="el => setChildRef('taskoutput_' + i, el)" />
         <ToolCall v-else-if="block.type === 'tool_use'" :block="block" :ref="el => setChildRef('tool_' + i, el)" />
         <ToolResult v-else-if="block.type === 'tool_result'" :block="block" :ref="el => setChildRef('result_' + i, el)" />
         <ThinkingBlock v-else-if="block.type === 'thinking'" :block="block" :ref="el => setChildRef('thinking_' + i, el)" />

@@ -1,48 +1,41 @@
 <template>
-  <div class="edit-tool-block">
-    <div class="edit-header">
-      <span class="edit-icon">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-        </svg>
-      </span>
-      <span class="edit-label">Edit File</span>
-    </div>
-    <div class="edit-content">
+  <CollapsibleBlock ref="blockRef" name="Edit" :summary="filePath">
+    <template #icon>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </svg>
+    </template>
+    <div class="edit-fields">
       <div class="edit-field">
-        <span class="field-label">File Path</span>
+        <span class="field-label">路径</span>
         <span class="field-value file-path">{{ filePath }}</span>
       </div>
       <div class="edit-field">
-        <span class="field-label">Old String</span>
+        <span class="field-label">原内容</span>
         <pre class="field-value code-diff old">{{ oldString }}</pre>
       </div>
       <div class="edit-field">
-        <span class="field-label">New String</span>
+        <span class="field-label">新内容</span>
         <pre class="field-value code-diff new">{{ newString }}</pre>
       </div>
     </div>
-  </div>
+  </CollapsibleBlock>
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { ref, computed } from 'vue';
+import CollapsibleBlock from '../common/CollapsibleBlock.vue';
 
 const props = defineProps({
-  block: {
-    type: Object,
-    required: true
-  }
+  block: { type: Object, required: true }
 });
+
+const blockRef = ref(null);
 
 const input = computed(() => {
   if (typeof props.block.input === 'string') {
-    try {
-      return JSON.parse(props.block.input);
-    } catch {
-      return props.block.input;
-    }
+    try { return JSON.parse(props.block.input); } catch { return props.block.input; }
   }
   return props.block.input || {};
 });
@@ -51,42 +44,14 @@ const filePath = computed(() => input.value.file_path || '');
 const oldString = computed(() => input.value.old_string || '');
 const newString = computed(() => input.value.new_string || '');
 
-function expandAll() {}
-function collapseAll() {}
+function expandAll() { blockRef.value?.expandAll(); }
+function collapseAll() { blockRef.value?.collapseAll(); }
 
 defineExpose({ expandAll, collapseAll });
 </script>
 
 <style scoped>
-.edit-tool-block {
-  margin-top: 8px;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background-color: var(--bg-secondary);
-}
-
-.edit-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background-color: var(--bg-tertiary);
-}
-
-.edit-icon {
-  display: flex;
-  align-items: center;
-  color: var(--accent);
-}
-
-.edit-label {
-  font-weight: 600;
-  font-size: var(--font-size-sm);
-  color: var(--text-primary);
-}
-
-.edit-content {
-  padding: 12px;
+.edit-fields {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -132,11 +97,6 @@ defineExpose({ expandAll, collapseAll });
   overflow-x: auto;
 }
 
-.code-diff.old {
-  background-color: var(--diff-del-bg);
-}
-
-.code-diff.new {
-  background-color: var(--diff-add-bg);
-}
+.code-diff.old { background-color: var(--diff-del-bg); }
+.code-diff.new { background-color: var(--diff-add-bg); }
 </style>

@@ -1,53 +1,51 @@
 <template>
-  <div class="read-tool-block">
-    <div class="read-header">
-      <span class="read-icon">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
-          <line x1="16" y1="13" x2="8" y2="13"/>
-          <line x1="16" y1="17" x2="8" y2="17"/>
-          <polyline points="10 9 9 9 8 9"/>
-        </svg>
-      </span>
-      <span class="read-label">Read File</span>
-    </div>
-    <div class="read-content">
+  <CollapsibleBlock
+    ref="blockRef"
+    name="Read"
+    :summary="filePath"
+    :status="readStatus"
+  >
+    <template #icon>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/>
+        <line x1="16" y1="17" x2="8" y2="17"/>
+        <polyline points="10 9 9 9 8 9"/>
+      </svg>
+    </template>
+    <div class="read-fields">
       <div class="read-field">
-        <span class="field-label">File Path</span>
+        <span class="field-label">路径</span>
         <span class="field-value file-path">{{ filePath }}</span>
       </div>
       <div class="read-params">
         <div v-if="offset !== null" class="read-param">
-          <span class="param-label">Offset</span>
+          <span class="param-label">起始行</span>
           <span class="param-value">{{ offset }}</span>
         </div>
         <div v-if="limit !== null" class="read-param">
-          <span class="param-label">Limit</span>
+          <span class="param-label">行数</span>
           <span class="param-value">{{ limit }}</span>
         </div>
       </div>
     </div>
-  </div>
+  </CollapsibleBlock>
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { ref, computed } from 'vue';
+import CollapsibleBlock from '../common/CollapsibleBlock.vue';
 
 const props = defineProps({
-  block: {
-    type: Object,
-    required: true
-  }
+  block: { type: Object, required: true }
 });
+
+const blockRef = ref(null);
 
 const input = computed(() => {
   if (typeof props.block.input === 'string') {
-    try {
-      return JSON.parse(props.block.input);
-    } catch {
-      return props.block.input;
-    }
+    try { return JSON.parse(props.block.input); } catch { return props.block.input; }
   }
   return props.block.input || {};
 });
@@ -56,51 +54,24 @@ const filePath = computed(() => input.value.file_path || '');
 const offset = computed(() => input.value.offset ?? null);
 const limit = computed(() => input.value.limit ?? null);
 
-function expandAll() {}
-function collapseAll() {}
+const readStatus = computed(() => {
+  if (offset.value !== null && limit.value !== null) {
+    return `第 ${offset.value}-${offset.value + limit.value} 行`;
+  }
+  if (offset.value !== null) return `第 ${offset.value} 行起`;
+  if (limit.value !== null) return `${limit.value} 行`;
+  return '';
+});
+
+function expandAll() { blockRef.value?.expandAll(); }
+function collapseAll() { blockRef.value?.collapseAll(); }
 
 defineExpose({ expandAll, collapseAll });
 </script>
 
 <style scoped>
-.read-tool-block {
-  margin-top: 8px;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background-color: var(--bg-secondary);
-}
-
-.read-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background-color: var(--bg-tertiary);
-}
-
-.read-icon {
-  display: flex;
-  align-items: center;
-  color: var(--accent);
-}
-
-.read-label {
-  font-weight: 600;
-  font-size: var(--font-size-sm);
-  color: var(--text-primary);
-}
-
-.read-content {
-  padding: 12px;
-}
-
-.read-field {
-  margin-bottom: 8px;
-}
-
-.read-field:last-child {
-  margin-bottom: 0;
-}
+.read-field { margin-bottom: 8px; }
+.read-field:last-child { margin-bottom: 0; }
 
 .field-label {
   display: block;
@@ -126,22 +97,11 @@ defineExpose({ expandAll, collapseAll });
   word-break: break-all;
 }
 
-.read-params {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-}
+.read-params { display: flex; gap: 16px; flex-wrap: wrap; }
 
-.read-param {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
+.read-param { display: flex; align-items: center; gap: 6px; }
 
-.param-label {
-  font-size: var(--font-size-xs);
-  color: var(--text-muted);
-}
+.param-label { font-size: var(--font-size-xs); color: var(--text-muted); }
 
 .param-value {
   font-family: var(--font-mono);

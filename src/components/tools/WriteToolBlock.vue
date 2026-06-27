@@ -1,44 +1,37 @@
 <template>
-  <div class="write-tool-block">
-    <div class="write-header">
-      <span class="write-icon">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-        </svg>
-      </span>
-      <span class="write-label">Write File</span>
-    </div>
-    <div class="write-content">
+  <CollapsibleBlock ref="blockRef" name="Write" :summary="filePath" :status="lineStatus">
+    <template #icon>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </svg>
+    </template>
+    <div class="write-fields">
       <div class="write-field">
-        <span class="field-label">File Path</span>
+        <span class="field-label">路径</span>
         <span class="field-value file-path">{{ filePath }}</span>
       </div>
       <div class="write-field">
-        <span class="field-label">Content</span>
+        <span class="field-label">内容</span>
         <pre class="field-value code-content">{{ content }}</pre>
       </div>
     </div>
-  </div>
+  </CollapsibleBlock>
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { ref, computed } from 'vue';
+import CollapsibleBlock from '../common/CollapsibleBlock.vue';
 
 const props = defineProps({
-  block: {
-    type: Object,
-    required: true
-  }
+  block: { type: Object, required: true }
 });
+
+const blockRef = ref(null);
 
 const input = computed(() => {
   if (typeof props.block.input === 'string') {
-    try {
-      return JSON.parse(props.block.input);
-    } catch {
-      return props.block.input;
-    }
+    try { return JSON.parse(props.block.input); } catch { return props.block.input; }
   }
   return props.block.input || {};
 });
@@ -46,42 +39,20 @@ const input = computed(() => {
 const filePath = computed(() => input.value.file_path || '');
 const content = computed(() => input.value.content || '');
 
-function expandAll() {}
-function collapseAll() {}
+const lineStatus = computed(() => {
+  if (!content.value) return '';
+  const lines = content.value.split('\n').length;
+  return `${lines} 行`;
+});
+
+function expandAll() { blockRef.value?.expandAll(); }
+function collapseAll() { blockRef.value?.collapseAll(); }
 
 defineExpose({ expandAll, collapseAll });
 </script>
 
 <style scoped>
-.write-tool-block {
-  margin-top: 8px;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background-color: var(--bg-secondary);
-}
-
-.write-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background-color: var(--bg-tertiary);
-}
-
-.write-icon {
-  display: flex;
-  align-items: center;
-  color: var(--accent);
-}
-
-.write-label {
-  font-weight: 600;
-  font-size: var(--font-size-sm);
-  color: var(--text-primary);
-}
-
-.write-content {
-  padding: 12px;
+.write-fields {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -116,6 +87,15 @@ defineExpose({ expandAll, collapseAll });
 }
 
 .code-content {
+  margin: 0;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  overflow-x: auto;
   background-color: var(--code-bg);
 }
 </style>

@@ -1,20 +1,17 @@
 <template>
-  <div class="todo-write-block">
-    <div class="todo-header">
-      <span class="todo-icon">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M9 11l3 3L22 4"></path>
-          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
-        </svg>
-      </span>
-      <span class="todo-label">TodoWrite</span>
-      <span class="todo-stats">
+  <CollapsibleBlock ref="blockRef" name="TodoWrite" :summary="firstTodo" :status="todoStatus">
+    <template #icon>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 11l3 3L22 4"></path>
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+      </svg>
+    </template>
+    <div class="todo-fields">
+      <div class="todo-stats">
         <span v-if="completedCount > 0" class="stat completed-stat">{{ completedCount }} 完成</span>
         <span v-if="inProgressCount > 0" class="stat progress-stat">{{ inProgressCount }} 进行中</span>
         <span v-if="pendingCount > 0" class="stat pending-stat">{{ pendingCount }} 待办</span>
-      </span>
-    </div>
-    <div class="todo-content">
+      </div>
       <div
         v-for="(todo, index) in todos"
         :key="index"
@@ -38,26 +35,22 @@
         </div>
       </div>
     </div>
-  </div>
+  </CollapsibleBlock>
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { ref, computed } from 'vue';
+import CollapsibleBlock from '../common/CollapsibleBlock.vue';
 
 const props = defineProps({
-  block: {
-    type: Object,
-    required: true
-  }
+  block: { type: Object, required: true }
 });
+
+const blockRef = ref(null);
 
 const input = computed(() => {
   if (typeof props.block.input === 'string') {
-    try {
-      return JSON.parse(props.block.input);
-    } catch {
-      return {};
-    }
+    try { return JSON.parse(props.block.input); } catch { return {}; }
   }
   return props.block.input || {};
 });
@@ -76,45 +69,25 @@ const completedCount = computed(() => todos.value.filter(t => t.status === 'comp
 const inProgressCount = computed(() => todos.value.filter(t => t.status === 'in_progress').length);
 const pendingCount = computed(() => todos.value.filter(t => t.status === 'pending').length);
 
-function expandAll() {}
-function collapseAll() {}
+const firstTodo = computed(() => todos.value[0]?.content || '');
+const todoStatus = computed(() => {
+  if (!todos.value.length) return '';
+  return `${completedCount.value}/${todos.value.length}`;
+});
+
+function expandAll() { blockRef.value?.expandAll(); }
+function collapseAll() { blockRef.value?.collapseAll(); }
 
 defineExpose({ expandAll, collapseAll });
 </script>
 
 <style scoped>
-.todo-write-block {
-  margin-top: 8px;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background-color: var(--bg-secondary);
-}
-
-.todo-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background-color: var(--bg-tertiary);
-}
-
-.todo-icon {
-  display: flex;
-  align-items: center;
-  color: var(--accent);
-}
-
-.todo-label {
-  font-weight: 600;
-  font-size: var(--font-size-sm);
-  color: var(--text-primary);
-}
-
 .todo-stats {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
 }
 
 .stat {
@@ -124,24 +97,9 @@ defineExpose({ expandAll, collapseAll });
   font-weight: 500;
 }
 
-.stat.completed-stat {
-  color: var(--success);
-  background: var(--success-bg);
-}
-
-.stat.progress-stat {
-  color: var(--accent);
-  background: var(--accent-bg);
-}
-
-.stat.pending-stat {
-  color: var(--text-muted);
-  background: var(--bg-primary);
-}
-
-.todo-content {
-  padding: 8px 12px;
-}
+.stat.completed-stat { color: var(--success); background: var(--success-bg); }
+.stat.progress-stat { color: var(--accent); background: var(--accent-bg); }
+.stat.pending-stat { color: var(--text-muted); background: var(--bg-primary); }
 
 .todo-item {
   display: flex;
@@ -163,17 +121,9 @@ defineExpose({ expandAll, collapseAll });
   margin-top: 1px;
 }
 
-.todo-item.completed .todo-status-icon {
-  color: var(--success);
-}
-
-.todo-item.in_progress .todo-status-icon {
-  color: var(--accent);
-}
-
-.todo-item.pending .todo-status-icon {
-  color: var(--text-muted);
-}
+.todo-item.completed .todo-status-icon { color: var(--success); }
+.todo-item.in_progress .todo-status-icon { color: var(--accent); }
+.todo-item.pending .todo-status-icon { color: var(--text-muted); }
 
 .todo-text {
   display: flex;

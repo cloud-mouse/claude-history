@@ -1,50 +1,24 @@
 <template>
-  <div :class="['task-update-block', status]">
-    <div class="update-header">
-      <span class="update-icon">
-        <svg v-if="status === 'completed'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <path d="M20 6L9 17l-5-5"></path>
-        </svg>
-        <svg v-else-if="status === 'in_progress'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"></circle>
-          <polyline points="12 6 12 12 16 14"></polyline>
-        </svg>
-        <svg v-else-if="status === 'deleted'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="15" y1="9" x2="9" y2="15"></line>
-          <line x1="9" y1="9" x2="15" y2="15"></line>
-        </svg>
-        <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"></circle>
-        </svg>
-      </span>
-      <span class="update-label">TaskUpdate</span>
-      <span class="status-badge" :class="status">{{ statusLabel }}</span>
-      <span v-if="taskId" class="task-id">#{{ taskId }}</span>
-    </div>
-    <div v-if="subject" class="update-content">
+  <CollapsibleBlock ref="blockRef" name="TaskUpdate" :summary="subject" :status="statusLabel">
+    <div v-if="subject" class="update-fields">
       <span class="task-subject">{{ subject }}</span>
     </div>
-  </div>
+  </CollapsibleBlock>
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { ref, computed } from 'vue';
+import CollapsibleBlock from '../common/CollapsibleBlock.vue';
 
 const props = defineProps({
-  block: {
-    type: Object,
-    required: true
-  }
+  block: { type: Object, required: true }
 });
+
+const blockRef = ref(null);
 
 const input = computed(() => {
   if (typeof props.block.input === 'string') {
-    try {
-      return JSON.parse(props.block.input);
-    } catch {
-      return {};
-    }
+    try { return JSON.parse(props.block.input); } catch { return {}; }
   }
   return props.block.input || {};
 });
@@ -63,91 +37,15 @@ const statusLabel = computed(() => {
   return map[status.value] || status.value;
 });
 
-function expandAll() {}
-function collapseAll() {}
+function expandAll() { blockRef.value?.expandAll(); }
+function collapseAll() { blockRef.value?.collapseAll(); }
 
 defineExpose({ expandAll, collapseAll });
 </script>
 
 <style scoped>
-.task-update-block {
-  margin-top: 8px;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background-color: var(--bg-secondary);
-}
-
-.update-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background-color: var(--bg-tertiary);
-}
-
-.update-icon {
-  display: flex;
-  align-items: center;
-}
-
-.task-update-block.completed .update-icon {
-  color: var(--success);
-}
-
-.task-update-block.in_progress .update-icon {
-  color: var(--accent);
-}
-
-.task-update-block.deleted .update-icon {
-  color: var(--danger);
-}
-
-.task-update-block.pending .update-icon {
-  color: var(--text-muted);
-}
-
-.update-label {
-  font-weight: 600;
-  font-size: var(--font-size-sm);
-  color: var(--text-primary);
-}
-
-.status-badge {
-  font-size: var(--font-size-xs);
-  font-weight: 500;
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-}
-
-.status-badge.completed {
-  color: var(--success);
-  background: var(--success-bg);
-}
-
-.status-badge.in_progress {
-  color: var(--accent);
-  background: var(--accent-bg);
-}
-
-.status-badge.pending {
-  color: var(--text-muted);
-  background: var(--bg-primary);
-}
-
-.status-badge.deleted {
-  color: var(--danger);
-  background: var(--danger-bg);
-}
-
-.task-id {
-  font-size: var(--font-size-xs);
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  margin-left: auto;
-}
-
-.update-content {
-  padding: 8px 12px;
+.update-fields {
+  padding: 4px 0;
 }
 
 .task-subject {

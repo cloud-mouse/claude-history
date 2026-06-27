@@ -21,28 +21,22 @@
           />
         </div>
         <div class="app-toolbar">
-          <UpdateNotification @open="openUpdateModal" />
           <button class="settings-btn" @click="showSearch = true" title="全文搜索 (Ctrl/Cmd+Shift+F)">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="8"></circle>
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
           </button>
-          <button class="settings-btn" @click="showStats = true" title="使用统计">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="20" x2="18" y2="10"></line>
-              <line x1="12" y1="20" x2="12" y2="4"></line>
-              <line x1="6" y1="20" x2="6" y2="14"></line>
-            </svg>
-          </button>
-          <button class="settings-btn" @click="showSettings = true" title="设置"
-            :class="{ connected: feishuStore.connected }">
+          <button class="settings-btn" @click="openSettings()" title="设置">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="3"></circle>
               <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
             </svg>
+            <span v-if="feishuStore.connected || updateStore.hasUpdate" class="settings-badge">
+              <span v-if="feishuStore.connected" class="badge-dot badge-connected"></span>
+              <span v-if="updateStore.hasUpdate" class="badge-dot badge-update"></span>
+            </span>
           </button>
-          <ThemeSelector />
         </div>
       </aside>
 
@@ -104,10 +98,8 @@
       </main>
     </div>
 
-    <SettingsModal :show="showSettings" @close="showSettings = false" />
-    <StatsModal :show="showStats" @close="showStats = false" />
+    <SettingsModal :show="showSettings" :initialTab="settingsInitialTab" @close="showSettings = false" />
     <SearchOverlay :show="showSearch" @close="showSearch = false" @select="handleSearchSelect" />
-    <UpdateModal :show="showUpdateModal" @close="showUpdateModal = false" />
   </div>
 </template>
 
@@ -119,25 +111,22 @@ import { useThemeStore } from './stores/theme';
 import ProjectList from './components/layout/ProjectList.vue';
 import ConversationList from './components/layout/ConversationList.vue';
 import MessageThread from './components/layout/MessageThread.vue';
-import ThemeSelector from './components/common/ThemeSelector.vue';
-import SettingsModal from './components/feishu/SettingsModal.vue';
-import StatsModal from './components/stats/StatsModal.vue';
+import SettingsModal from './components/settings/SettingsModal.vue';
 import SearchOverlay from './components/search/SearchOverlay.vue';
-import UpdateNotification from './components/common/UpdateNotification.vue';
-import UpdateModal from './components/common/UpdateModal.vue';
 import { useFeishuStore } from './stores/feishu';
 import { useUpdateStore } from './stores/update';
+import { useStatsStore } from './stores/stats';
 
 const projectsStore = useProjectsStore();
 const conversationsStore = useConversationsStore();
 const themeStore = useThemeStore();
 const feishuStore = useFeishuStore();
 const updateStore = useUpdateStore();
+const statsStore = useStatsStore();
 
 const showSettings = ref(false);
-const showStats = ref(false);
 const showSearch = ref(false);
-const showUpdateModal = ref(false);
+const settingsInitialTab = ref('feishu');
 
 const leftPanelWidth = ref(240);
 const middlePanelWidth = ref(300);
@@ -158,10 +147,10 @@ function handleConversationSelect(conv) {
   conversationsStore.openConversation(conv);
 }
 
-// Open the update modal; (re)check latest first so the info is fresh.
-async function openUpdateModal() {
-  await updateStore.check();
-  showUpdateModal.value = true;
+// Open the settings modal, optionally deep-linking to a specific tab.
+function openSettings(tab = 'feishu') {
+  settingsInitialTab.value = tab;
+  showSettings.value = true;
 }
 
 // Open a conversation jumped to from full-text search, focusing the matched message.
@@ -274,10 +263,17 @@ onMounted(() => {
     })
   );
 
-  // Startup update check: if a newer release exists, auto-open the update modal.
-  // (Signing-independent — fetches the latest GitHub release, opens browser to download.)
+  // Stats reindex runs in the background; subscribe at the App level so the store
+  // keeps tracking progress even while the settings/stats tab is closed.
+  _unsubs.push(
+    window.electronAPI.onStatsReindexProgress((p) => statsStore.handleReindexProgress(p))
+  );
+
+  // Startup update check: if a newer release exists, deep-link the settings modal
+  // to the "关于与更新" tab. (Signing-independent — fetches the latest GitHub
+  // release, opens browser to download.)
   updateStore.check().then(() => {
-    if (updateStore.hasUpdate) showUpdateModal.value = true;
+    if (updateStore.hasUpdate) openSettings('about');
   }).catch(() => {});
 
   // Global shortcut: Cmd/Ctrl+Shift+F opens full-text search.
@@ -362,6 +358,7 @@ onUnmounted(() => {
 }
 
 .settings-btn {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -380,8 +377,35 @@ onUnmounted(() => {
   color: var(--text-primary);
 }
 
-.settings-btn.connected {
-  color: var(--color-success);
+/* Dual-signal badge: green = Feishu connected, red = update available. */
+.settings-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1.5px solid var(--bg-panel);
+}
+
+.badge-connected { background: var(--success); }
+
+.badge-update {
+  background: var(--danger);
+  animation: badge-pulse 2s infinite;
+}
+
+@keyframes badge-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.85); }
 }
 
 .panel-divider {

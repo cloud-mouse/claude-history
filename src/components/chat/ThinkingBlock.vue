@@ -1,26 +1,25 @@
 <template>
-  <div class="thinking-block">
-    <button class="toggle-btn" @click="expanded = !expanded">
-      <span class="toggle-icon">{{ expanded ? '▼' : '▶' }}</span>
-      <span class="thinking-label">Thinking</span>
-    </button>
-    <div v-if="expanded" class="thinking-content">
-      <p class="thinking-text">{{ thinkingText }}</p>
-    </div>
-  </div>
+  <CollapsibleBlock ref="blockRef" name="思考" :summary="summaryText">
+    <template #icon>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 18h6"></path>
+        <path d="M10 22h4"></path>
+        <path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0018 8 6 6 0 006 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 018.91 14"></path>
+      </svg>
+    </template>
+    <p class="thinking-text">{{ thinkingText }}</p>
+  </CollapsibleBlock>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue';
+import CollapsibleBlock from '../common/CollapsibleBlock.vue';
 
 const props = defineProps({
-  block: {
-    type: Object,
-    required: true
-  }
+  block: { type: Object, required: true }
 });
 
-const expanded = ref(false);
+const blockRef = ref(null);
 
 const thinkingText = computed(() => {
   const thinking = props.block.thinking || props.block.content || props.block.text || '';
@@ -30,61 +29,20 @@ const thinkingText = computed(() => {
   return JSON.stringify(thinking, null, 2);
 });
 
-// Expand all (set expanded to true)
-function expandAll() {
-  expanded.value = true;
-}
+const summaryText = computed(() => {
+  const text = thinkingText.value;
+  if (!text) return '';
+  const firstLine = text.split('\n')[0];
+  return firstLine.length > 60 ? firstLine.slice(0, 60) + '…' : firstLine;
+});
 
-function collapseAll() {
-  expanded.value = false;
-}
+function expandAll() { blockRef.value?.expandAll(); }
+function collapseAll() { blockRef.value?.collapseAll(); }
 
 defineExpose({ expandAll, collapseAll });
 </script>
 
 <style scoped>
-.thinking-block {
-  margin-top: 8px;
-  border-radius: var(--radius-card);
-  overflow: hidden;
-  background-color: var(--bg-secondary);
-}
-
-.toggle-btn {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background-color: var(--bg-tertiary);
-  border: none;
-  cursor: pointer;
-  font-family: var(--font-sans);
-  font-size: var(--font-size-sm);
-  color: var(--text-primary);
-  text-align: left;
-  transition: background var(--transition-fast);
-}
-
-.toggle-btn:hover {
-  background-color: var(--surface-hover);
-}
-
-.toggle-icon {
-  font-size: 10px;
-  color: var(--text-muted);
-}
-
-.thinking-label {
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.thinking-content {
-  padding: 12px;
-  background-color: var(--bg-primary);
-}
-
 .thinking-text {
   margin: 0;
   font-style: italic;

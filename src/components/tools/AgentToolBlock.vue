@@ -1,24 +1,20 @@
 <template>
-  <div class="agent-tool-block">
-    <div class="agent-header">
-      <span class="agent-icon">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
-          <path d="M2 17l10 5 10-5"></path>
-          <path d="M2 12l10 5 10-5"></path>
-        </svg>
-      </span>
-      <span class="agent-label">Agent</span>
-      <span v-if="subagentType" class="agent-type-badge">{{ subagentType }}</span>
-    </div>
-    <div class="agent-content">
+  <CollapsibleBlock ref="blockRef" name="Agent" :summary="description" :status="subagentType">
+    <template #icon>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+        <path d="M2 17l10 5 10-5"></path>
+        <path d="M2 12l10 5 10-5"></path>
+      </svg>
+    </template>
+    <div class="agent-fields">
       <div v-if="description" class="agent-field">
-        <span class="field-label">Description</span>
+        <span class="field-label">描述</span>
         <span class="field-value description">{{ description }}</span>
       </div>
       <div v-if="promptText" class="agent-field">
         <div class="prompt-header">
-          <span class="field-label">Prompt</span>
+          <span class="field-label">提示</span>
           <button class="prompt-toggle" @click="promptExpanded = !promptExpanded">
             <svg v-if="promptExpanded" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M19 9l-7 7-7-7"></path>
@@ -34,28 +30,25 @@
         </div>
       </div>
     </div>
-  </div>
+  </CollapsibleBlock>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue';
+import CollapsibleBlock from '../common/CollapsibleBlock.vue';
 
 const props = defineProps({
-  block: {
-    type: Object,
-    required: true
-  }
+  block: { type: Object, required: true }
 });
 
+const blockRef = ref(null);
+// Local expand state for the prompt block only; the outer CollapsibleBlock
+// handles the overall collapse (driven by "展开/收起全部").
 const promptExpanded = ref(false);
 
 const input = computed(() => {
   if (typeof props.block.input === 'string') {
-    try {
-      return JSON.parse(props.block.input);
-    } catch {
-      return {};
-    }
+    try { return JSON.parse(props.block.input); } catch { return {}; }
   }
   return props.block.input || {};
 });
@@ -69,66 +62,15 @@ const promptLineCount = computed(() => {
   return promptText.value.split('\n').length;
 });
 
-function expandAll() {
-  promptExpanded.value = true;
-}
-
-function collapseAll() {
-  promptExpanded.value = false;
-}
+function expandAll() { blockRef.value?.expandAll(); }
+function collapseAll() { blockRef.value?.collapseAll(); }
 
 defineExpose({ expandAll, collapseAll });
 </script>
 
 <style scoped>
-.agent-tool-block {
-  margin-top: 8px;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background-color: var(--bg-secondary);
-}
-
-.agent-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background-color: var(--bg-tertiary);
-}
-
-.agent-icon {
-  display: flex;
-  align-items: center;
-  color: var(--accent);
-}
-
-.agent-label {
-  font-weight: 600;
-  font-size: var(--font-size-sm);
-  color: var(--text-primary);
-}
-
-.agent-type-badge {
-  font-size: var(--font-size-xs);
-  font-weight: 500;
-  color: var(--accent);
-  background: var(--accent-bg);
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  margin-left: auto;
-}
-
-.agent-content {
-  padding: 12px;
-}
-
-.agent-field {
-  margin-bottom: 10px;
-}
-
-.agent-field:last-child {
-  margin-bottom: 0;
-}
+.agent-field { margin-bottom: 10px; }
+.agent-field:last-child { margin-bottom: 0; }
 
 .field-label {
   display: block;

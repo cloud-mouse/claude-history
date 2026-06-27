@@ -1,16 +1,13 @@
 <template>
-  <div class="ask-question-block">
-    <div class="question-header">
-      <span class="question-icon">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"></circle>
-          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-          <line x1="12" y1="17" x2="12.01" y2="17"></line>
-        </svg>
-      </span>
-      <span class="question-label">Question</span>
-    </div>
-    <div class="question-content">
+  <CollapsibleBlock ref="blockRef" name="AskUserQuestion" :summary="firstQuestion">
+    <template #icon>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"></circle>
+        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+      </svg>
+    </template>
+    <div class="question-fields">
       <template v-for="(q, qi) in questions" :key="qi">
         <div class="question-item">
           <div class="question-meta">
@@ -39,26 +36,22 @@
         </div>
       </template>
     </div>
-  </div>
+  </CollapsibleBlock>
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { ref, computed } from 'vue';
+import CollapsibleBlock from '../common/CollapsibleBlock.vue';
 
 const props = defineProps({
-  block: {
-    type: Object,
-    required: true
-  }
+  block: { type: Object, required: true }
 });
+
+const blockRef = ref(null);
 
 const input = computed(() => {
   if (typeof props.block.input === 'string') {
-    try {
-      return JSON.parse(props.block.input);
-    } catch {
-      return {};
-    }
+    try { return JSON.parse(props.block.input); } catch { return {}; }
   }
   return props.block.input || {};
 });
@@ -79,48 +72,19 @@ const questions = computed(() => {
   return raw;
 });
 
+const firstQuestion = computed(() => questions.value[0]?.question || '');
+
 function isOptionSelected(qIndex, oIndex) {
   return false;
 }
 
-function expandAll() {}
-function collapseAll() {}
+function expandAll() { blockRef.value?.expandAll(); }
+function collapseAll() { blockRef.value?.collapseAll(); }
 
 defineExpose({ expandAll, collapseAll });
 </script>
 
 <style scoped>
-.ask-question-block {
-  margin-top: 8px;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background-color: var(--bg-secondary);
-}
-
-.question-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background-color: var(--bg-tertiary);
-}
-
-.question-icon {
-  display: flex;
-  align-items: center;
-  color: var(--accent);
-}
-
-.question-label {
-  font-weight: 600;
-  font-size: var(--font-size-sm);
-  color: var(--text-primary);
-}
-
-.question-content {
-  padding: 12px;
-}
-
 .question-item + .question-item {
   margin-top: 16px;
   padding-top: 16px;
