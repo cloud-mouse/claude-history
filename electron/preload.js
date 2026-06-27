@@ -92,5 +92,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_, data) => callback(data);
     ipcRenderer.on('stats:reindex-progress', handler);
     return () => ipcRenderer.removeListener('stats:reindex-progress', handler);
+  },
+
+  // Application menu → renderer: the 设置… and 关于 menu items (see index.js)
+  // ask to open the settings modal on a specific tab ('about' | 'feishu').
+  onMenuOpenSettings: (callback) => {
+    const handler = (_, tab) => callback(tab);
+    ipcRenderer.on('menu:openSettings', handler);
+    return () => ipcRenderer.removeListener('menu:openSettings', handler);
   }
 });

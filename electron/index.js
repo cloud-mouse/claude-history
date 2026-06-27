@@ -135,50 +135,108 @@ function createWindow() {
   feishuBridge.migrateFromCcConnect();
 }
 
-// Create application menu with keyboard shortcuts
+// Build the application menu bar.
+//
+// macOS: the first item is the app menu (bold app name); it owns About/Settings/
+// Services/Hide/Quit — the conventional slots. Win/Linux get a "文件" menu with
+// Settings + Quit instead.
+//
+// "设置…" and "关于" deep-link into the renderer's settings modal via the
+// `menu:openSettings` IPC (see preload.js + App.vue). The app menu's label is
+// hard-coded rather than app.name: in unpackaged dev the bundle name is
+// "Electron", which would otherwise show as the first menu's title.
 function createMenu() {
-  const template = [
-    {
-      label: app.name,
-      submenu: [
-        { label: '退出 ' + app.name, accelerator: 'CmdOrCtrl+Q', role: 'quit' }
-      ]
-    },
-    {
-      label: '视图',
-      submenu: [
-        {
-          label: '开发者工具',
-          accelerator: 'CmdOrCtrl+K',
-          click: () => {
-            if (mainWindow) {
-              if (mainWindow.webContents.isDevToolsOpened()) {
-                mainWindow.webContents.closeDevTools();
-              } else {
-                mainWindow.webContents.openDevTools();
-              }
-            }
-          }
-        },
-        { type: 'separator' },
-        { label: '重新加载', role: 'reload' },
-        { label: '强制重新加载', role: 'forceReload' },
-        { label: '切换开发者工具', role: 'toggleDevTools' },
-        { type: 'separator' },
-        { label: '撤销', role: 'undo' },
-        { label: '重做', role: 'redo' },
-        { type: 'separator' },
-        { label: '剪切', role: 'cut' },
-        { label: '复制', role: 'copy' },
-        { label: '粘贴', role: 'paste' },
-        { label: '全选', role: 'selectAll' },
-        { type: 'separator' },
-        { label: '放大', role: 'zoomIn' },
-        { label: '缩小', role: 'zoomOut' },
-        { label: '重置缩放', role: 'resetZoom' }
-      ]
+  const isMac = process.platform === 'darwin';
+  const APP_NAME = 'Claude History';
+  const REPO_URL = 'https://github.com/cloud-mouse/claude-history';
+
+  // Open the renderer settings modal on a specific tab ('about' | default).
+  const openSettings = (tab) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('menu:openSettings', tab);
     }
-  ];
+  };
+
+  const template = [];
+
+  if (isMac) {
+    template.push({
+      label: APP_NAME,
+      submenu: [
+        { label: `关于 ${APP_NAME}`, click: () => openSettings('about') },
+        { type: 'separator' },
+        { label: '设置…', accelerator: 'CmdOrCtrl+,', click: () => openSettings('feishu') },
+        { type: 'separator' },
+        { role: 'services', label: '服务' },
+        { type: 'separator' },
+        { role: 'hide', label: `隐藏 ${APP_NAME}` },
+        { role: 'hideOthers', label: '隐藏其他' },
+        { role: 'unhide', label: '显示全部' },
+        { type: 'separator' },
+        { role: 'quit', label: `退出 ${APP_NAME}` }
+      ]
+    });
+  } else {
+    // Win/Linux have no app menu — surface Settings + Quit under a 文件 menu.
+    template.push({
+      label: '文件',
+      submenu: [
+        { label: '设置…', accelerator: 'CmdOrCtrl+,', click: () => openSettings('feishu') },
+        { type: 'separator' },
+        { role: 'quit', label: `退出 ${APP_NAME}` }
+      ]
+    });
+  }
+
+  template.push({
+    label: '编辑',
+    submenu: [
+      { role: 'undo', label: '撤销' },
+      { role: 'redo', label: '重做' },
+      { type: 'separator' },
+      { role: 'cut', label: '剪切' },
+      { role: 'copy', label: '复制' },
+      { role: 'paste', label: '粘贴' },
+      { role: 'selectAll', label: '全选' }
+    ]
+  });
+
+  template.push({
+    label: '视图',
+    submenu: [
+      { role: 'reload', label: '重新加载' },
+      { role: 'forceReload', label: '强制重新加载' },
+      // toggleDevTools uses the platform-default accelerator (⌘⌥I / F12),
+      // freeing the ⌘K the old hand-rolled item had claimed.
+      { role: 'toggleDevTools', label: '切换开发者工具' },
+      { type: 'separator' },
+      { role: 'resetZoom', label: '实际大小' },
+      { role: 'zoomIn', label: '放大' },
+      { role: 'zoomOut', label: '缩小' },
+      { type: 'separator' },
+      { role: 'togglefullscreen', label: '进入全屏' }
+    ]
+  });
+
+  template.push({
+    label: '窗口',
+    submenu: [
+      { role: 'minimize', label: '最小化' },
+      { role: 'zoom', label: '缩放' },
+      ...(!isMac ? [{ role: 'close', label: '关闭窗口' }] : []),
+      { type: 'separator' },
+      { role: 'front', label: '全部窗口到前台' }
+    ]
+  });
+
+  template.push({
+    label: '帮助',
+    submenu: [
+      { label: `${APP_NAME} 主页`, click: () => shell.openExternal(REPO_URL) },
+      { type: 'separator' },
+      { label: `关于 ${APP_NAME}`, click: () => openSettings('about') }
+    ]
+  });
 
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);

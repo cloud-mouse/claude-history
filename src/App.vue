@@ -272,6 +272,11 @@ onMounted(() => {
     window.electronAPI.onStatsReindexProgress((p) => statsStore.handleReindexProgress(p))
   );
 
+  // Native app-menu items (设置… / 关于) ask main to open the settings modal.
+  _unsubs.push(
+    window.electronAPI.onMenuOpenSettings((tab) => openSettings(tab || 'feishu'))
+  );
+
   // Startup update check: if a newer release exists, deep-link the settings modal
   // to the "关于与更新" tab. (Signing-independent — fetches the latest GitHub
   // release, opens browser to download.)
@@ -280,7 +285,6 @@ onMounted(() => {
   }).catch(() => {});
 
   // Global shortcut: Cmd/Ctrl+Shift+F opens full-text search.
-  // (Cmd/Ctrl+K is already taken by the dev-tools menu item in index.js.)
   const onKeydown = (e) => {
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'f' || e.key === 'F')) {
       e.preventDefault();
