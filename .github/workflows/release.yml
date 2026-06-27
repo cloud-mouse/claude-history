@@ -67,16 +67,14 @@ jobs:
 
           ---
 
-          ### Features
+          ### 🆕 本次更新（v1.5.0）
 
-          - **Three-panel layout** — Project list, conversation list, and message detail view; each panel is collapsible and resizable
-          - **Conversation browsing** — Auto-discovers all projects from `~/.claude/projects/`, with search and smart date formatting
-          - **Rich message rendering** — Full Markdown support, syntax-highlighted code blocks, image preview with lightbox
-          - **Claude tool visualization** — Dedicated components for Edit, Write, Read, Glob, Grep, Agent, Thinking, Todo, Task tools and more
-          - **Session resume** — One-click to open terminal and resume a Claude Code session
-          - **4 built-in themes** — Light, Dark, Warm, and Monokai with instant switching
-          - **SQLite caching** — Fast loading with local database cache and LRU in-memory cache
-          - **Smart title extraction** — Automatically generates conversation titles from message content
+          - **毛玻璃效果开关**：设置 → 外观新增「毛玻璃效果」开关，让整个应用窗口呈现原生毛玻璃（macOS vibrancy / Windows acrylic），默认开启、即时切换、跨重启持久化；Linux 自动隐藏。
+          - **修复毛玻璃从未生效**：vibrancy 自首次配置以来一直未真正渲染——本次修复两个根因（窗口缺少透明背景 + CSS 透明选择器写成后代选择器导致永不匹配），macOS 上首次真正透出毛玻璃。
+          - **统一设置中心**：原分散的统计/更新/主题入口合并为一个设置弹窗（飞书桥接 / 外观 / 使用统计 / 关于与更新）；工具栏精简为齿轮 + 全文搜索；齿轮徽章同时提示「飞书已连接」与「有新版本」。
+          - **会话右键菜单**：新的下拉菜单替换悬浮删除按钮，支持绑定/解绑飞书、恢复会话、复制命令、删除（带确认）。
+          - **消息块统一**：全部可折叠块（思考、11 种工具块、工具调用/结果）统一为 CollapsibleBlock——一致的圆角、SVG 箭头、默认折叠与摘要行；修复全部展开/折叠对工具块无效的问题。
+          - **UI 打磨**：文件快照改用统一折叠块（修复 ▼ 图标 bug、中文标签）；Cursor / VS Code / IntelliJ 改用官方 logo；齿轮图标适配明暗主题；设置弹窗固定尺寸，切换标签页不再跳动。
 
           ### Downloads
 
