@@ -1,48 +1,51 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <defs>
-    <linearGradient id="bgDark" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#2d2722"/>
-      <stop offset="1" stop-color="#0b0907"/>
-    </linearGradient>
-    <linearGradient id="topGloss" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0.18"/>
-      <stop offset="0.45" stop-color="#ffffff" stop-opacity="0"/>
-    </linearGradient>
-    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0.40"/>
-      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0.06"/>
-      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
-    </linearGradient>
-    <radialGradient id="aura" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#e07a4f" stop-opacity="0.55"/>
-      <stop offset="1" stop-color="#e07a4f" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="metalOrange" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ffd9b8"/>
-      <stop offset="0.42" stop-color="#e07a4f"/>
-      <stop offset="0.62" stop-color="#cf6638"/>
-      <stop offset="1" stop-color="#8c2e11"/>
-    </linearGradient>
-    <filter id="shadow" x="-30%" y="-30%" width="160%" height="175%">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="13"/>
-      <feOffset dx="0" dy="16" result="off"/>
-      <feComponentTransfer><feFuncA type="linear" slope="0.5"/></feComponentTransfer>
-      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    <filter id="glow" x="-70%" y="-70%" width="240%" height="240%">
-      <feGaussianBlur stdDeviation="7" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-  </defs>
-  <rect width="512" height="512" rx="115" fill="url(#bgDark)"/>
-  <rect width="512" height="512" rx="115" fill="url(#topGloss)"/>
-  <rect x="1.5" y="1.5" width="509" height="509" rx="113.5" fill="none" stroke="url(#rim)" stroke-width="2.5"/>
-  <circle cx="256" cy="256" r="190" fill="url(#aura)"/>
-  <path d="M 348 138 A 150 150 0 1 0 348 374" fill="none" stroke="url(#metalOrange)" stroke-width="70" stroke-linecap="round" filter="url(#shadow)"/>
-  <path d="M 200 118 A 150 150 0 0 1 312 118" fill="none" stroke="#fff4ec" stroke-opacity="0.55" stroke-width="9" stroke-linecap="round"/>
-  <g filter="url(#glow)">
-    <circle cx="370" cy="200" r="17" fill="#ffc6a0"/>
-    <circle cx="386" cy="256" r="17" fill="#ffc6a0"/>
-    <circle cx="370" cy="312" r="17" fill="#ffc6a0"/>
-  </g>
+<svg version="1.2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+	<defs>
+		<linearGradient id="g1" x2="1" gradientUnits="userSpaceOnUse" gradientTransform="matrix(0,439.488,-439.488,0,36.256,36.256)">
+			<stop offset="0" stop-color="#2d2722"/>
+			<stop offset="1" stop-color="#0b0907"/>
+		</linearGradient>
+		<linearGradient id="g2" x2="1" gradientUnits="userSpaceOnUse" gradientTransform="matrix(0,439.488,-439.488,0,36.256,36.256)">
+			<stop offset="0" stop-color="#ffffff" stop-opacity=".18"/>
+			<stop offset=".45" stop-color="#ffffff" stop-opacity="0"/>
+		</linearGradient>
+		<linearGradient id="g3" x2="1" gradientUnits="userSpaceOnUse" gradientTransform="matrix(0,436.913,-436.913,0,37.543,37.543)">
+			<stop offset="0" stop-color="#ffffff" stop-opacity=".4"/>
+			<stop offset=".5" stop-color="#ffffff" stop-opacity=".06"/>
+			<stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+		</linearGradient>
+		<radialGradient id="g4" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="matrix(163.091,0,0,163.091,256,256)">
+			<stop offset="0" stop-color="#e07a4f" stop-opacity=".55"/>
+			<stop offset="1" stop-color="#e07a4f" stop-opacity="0"/>
+		</radialGradient>
+		<filter x="-50%" y="-50%" width="200%" height="200%" id="f1" ><feDropShadow dx="-9.797174393178826e-16" dy="16" stdDeviation="12.916666666666668" flood-color="#000000" flood-opacity=".5"/></filter>
+		<linearGradient id="g5" x2="1" gradientUnits="userSpaceOnUse" gradientTransform="matrix(0,257.508,-208.248,0,126.723,127.246)">
+			<stop offset="0" stop-color="#ffd9b8"/>
+			<stop offset=".42" stop-color="#e07a4f"/>
+			<stop offset=".62" stop-color="#cf6638"/>
+			<stop offset="1" stop-color="#8c2e11"/>
+		</linearGradient>
+		<filter x="-50%" y="-50%" width="200%" height="200%" id="f2"> <feGaussianBlur stdDeviation="6"/> </filter>
+	</defs>
+	<style>
+		.s0 { fill: url(#g1) } 
+		.s1 { fill: url(#g2) } 
+		.s2 { fill: none;stroke: url(#g3);stroke-width: 2.5 } 
+		.s3 { fill: url(#g4) } 
+		.s4 { filter: url(#f1);fill: none;stroke: url(#g5);stroke-linecap: round;stroke-width: 70 } 
+		.s5 { opacity: .55;fill: none;stroke: #fff4ec;stroke-linecap: round;stroke-width: 9 } 
+		.s6 { filter: url(#f2);fill: #ffc6a0 } 
+	</style>
+	<g id="组 1 copy">
+		<path fill-rule="evenodd" class="s0" d="m134.97 36.26h242.06c54.52 0 98.71 44.19 98.71 98.71v242.06c0 54.52-44.19 98.71-98.71 98.71h-242.06c-54.52 0-98.71-44.19-98.71-98.71v-242.06c0-54.52 44.19-98.71 98.71-98.71z"/>
+		<path fill-rule="evenodd" class="s1" d="m134.97 36.26h242.06c54.52 0 98.71 44.19 98.71 98.71v242.06c0 54.52-44.19 98.71-98.71 98.71h-242.06c-54.52 0-98.71-44.19-98.71-98.71v-242.06c0-54.52 44.19-98.71 98.71-98.71z"/>
+		<path fill-rule="evenodd" class="s2" d="m134.97 37.54h242.06c53.81 0 97.43 43.62 97.43 97.43v242.06c0 53.81-43.62 97.43-97.43 97.43h-242.06c-53.81 0-97.43-43.62-97.43-97.43v-242.06c0-53.81 43.62-97.43 97.43-97.43z"/>
+		<path fill-rule="evenodd" class="s3" d="m256 419.09c-90.19 0-163.09-72.9-163.09-163.09 0-90.19 72.9-163.09 163.09-163.09 90.19 0 163.09 72.9 163.09 163.09 0 90.19-72.9 163.09-163.09 163.09z"/>
+		<path class="s4" d="m334.97 154.71c-38.76-30.42-91.49-36.05-135.81-14.5-44.31 21.56-72.44 66.51-72.44 115.79 0 49.28 28.13 94.23 72.44 115.79 44.32 21.55 97.05 15.92 135.81-14.5"/>
+		<path class="s5" d="m207.93 137.54c7.62-3.06 15.52-5.39 23.59-6.96 8.07-1.56 16.26-2.35 24.48-2.35 8.22 0 16.41 0.79 24.48 2.35 8.07 1.57 15.97 3.9 23.59 6.96"/>
+		<g>
+			<path fill-rule="evenodd" class="s6" d="m353.85 222.52c-8.06 0-14.59-6.52-14.59-14.59 0-8.07 6.53-14.59 14.59-14.59 8.07 0 14.6 6.52 14.6 14.59 0 8.07-6.53 14.59-14.6 14.59z"/>
+			<path fill-rule="evenodd" class="s6" d="m367.59 270.59c-8.07 0-14.59-6.52-14.59-14.59 0-8.07 6.52-14.59 14.59-14.59 8.07 0 14.59 6.52 14.59 14.59 0 8.07-6.52 14.59-14.59 14.59z"/>
+			<path fill-rule="evenodd" class="s6" d="m353.85 318.66c-8.06 0-14.59-6.52-14.59-14.59 0-8.07 6.53-14.59 14.59-14.59 8.07 0 14.6 6.52 14.6 14.59 0 8.07-6.53 14.59-14.6 14.59z"/>
+		</g>
+	</g>
 </svg>
