@@ -77,7 +77,7 @@ function registerIpcHandlers() {
   ipcMain.handle('scan-projects', async () => {
     try {
       const store = getStore();
-      const projects = scanProjects();
+      const projects = await scanProjects();
 
       // Clean up legacy bad titles (from older versions that didn't strip XML tags)
       const cleaned = store.cleanBadTitles();
@@ -102,7 +102,8 @@ function registerIpcHandlers() {
             dbProject.id,
             conv.filePath,
             conv.fileSize,
-            conv.updatedAt
+            conv.updatedAt,
+            conv.projectDir
           );
         }
 
@@ -132,7 +133,8 @@ function registerIpcHandlers() {
           filePath: conv.file_path,
           fileSize: conv.file_size,
           updatedAt: conv.updated_at,
-          title: conv.title
+          title: conv.title,
+          projectDir: conv.project_dir || null
         }));
       }
 
@@ -291,7 +293,8 @@ function registerIpcHandlers() {
         filePath: conv.file_path,
         fileSize: conv.file_size,
         updatedAt: conv.updated_at,
-        title: conv.title
+        title: conv.title,
+        projectDir: conv.project_dir || null
       }));
       return { success: true, conversations };
     } catch (err) {

@@ -107,7 +107,8 @@ class Store {
       "models TEXT NOT NULL DEFAULT ''",
       'last_cost_usd REAL',
       'last_duration_ms INTEGER',
-      'last_run_at INTEGER'
+      'last_run_at INTEGER',
+      'project_dir TEXT'
     ]) {
       try {
         this.db.exec(`ALTER TABLE conversations ADD COLUMN ${col}`);
@@ -159,16 +160,17 @@ class Store {
     return stmt.all();
   }
 
-  upsertConversation(projectId, filePath, fileSize, updatedAt) {
+  upsertConversation(projectId, filePath, fileSize, updatedAt, projectDir = null) {
     const stmt = this.db.prepare(`
-      INSERT INTO conversations (project_id, file_path, file_size, updated_at)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO conversations (project_id, file_path, file_size, updated_at, project_dir)
+      VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(file_path) DO UPDATE SET
         project_id = excluded.project_id,
         file_size = excluded.file_size,
-        updated_at = excluded.updated_at
+        updated_at = excluded.updated_at,
+        project_dir = COALESCE(excluded.project_dir, conversations.project_dir)
     `);
-    const result = stmt.run(projectId, filePath, fileSize, updatedAt);
+    const result = stmt.run(projectId, filePath, fileSize, updatedAt, projectDir);
     return result.lastInsertRowid;
   }
 
