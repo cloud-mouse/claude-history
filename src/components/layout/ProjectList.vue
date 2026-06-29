@@ -303,6 +303,7 @@ function formatRelativeTime(timestamp) {
   flex-direction: column;
   gap: 2px;
   overflow: hidden;
+  padding-right: 6px;
 }
 
 .project-name {

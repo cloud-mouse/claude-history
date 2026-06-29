@@ -509,7 +509,7 @@ onActivated(() => { feishuStore.detect(); });
 .btn-lg { padding: 9px 18px; font-size: 13px; }
 .btn-xs { padding: 2px 8px; font-size: 11px; }
 
-.help-card { margin-top: 22px; background: var(--bg-secondary); }
+.help-card { margin-top: 10px; background: var(--bg-secondary); padding: 16px; border-radius: 16px; }
 .card-title {
   font-size: 12px; font-weight: 600; color: var(--text-muted);
   margin: 0 0 14px; text-transform: uppercase; letter-spacing: 0.6px;
