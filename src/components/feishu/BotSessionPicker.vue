@@ -61,7 +61,6 @@
 <script setup>
 import { ref, computed, watch } from 'vue';
 import { cleanTitle } from '../../utils/title-extractor';
-import { decodeProjectDirName } from '../../utils/project-path';
 import { useProjectsStore } from '../../stores/projects';
 import { useFeishuStore } from '../../stores/feishu';
 
@@ -79,15 +78,15 @@ const sessions = ref([]);
 const loading = ref(false);
 const filter = ref('');
 
-// Find the project whose decoded cwd path matches the bot's projectDir, then
-// load its conversations. Falls back gracefully if no project matches.
+// Match by the real cwd stored on each conversation (projectDir), NOT by decoding
+// the slug name — a '-' inside a folder name like "my-space" makes slug decoding
+// ambiguous (my-space -> my/space) and would never match the bot's projectDir.
 const matchingProject = computed(() => {
   if (!props.bot || !props.bot.projectDir) return null;
   const target = props.bot.projectDir;
-  return (projectsStore.projects || []).find((p) => {
-    const decoded = p.name ? decodeProjectDirName(p.name) : null;
-    return decoded === target;
-  }) || null;
+  return (projectsStore.projects || []).find((p) =>
+    (p.conversations || []).some((c) => c.projectDir === target)
+  ) || null;
 });
 
 const filteredSessions = computed(() => {

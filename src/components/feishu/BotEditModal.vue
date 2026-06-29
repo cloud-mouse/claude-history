@@ -99,7 +99,6 @@
 <script setup>
 import { ref, computed, watch } from 'vue';
 import { useProjectsStore } from '../../stores/projects';
-import { decodeProjectDirName } from '../../utils/project-path';
 
 const props = defineProps({
   show: { type: Boolean, default: false },
@@ -114,20 +113,24 @@ const projectsStore = useProjectsStore();
 
 const isEdit = computed(() => !!props.bot);
 
-// Known projects as decoded real paths — for the service-directory datalist.
+// Real working directories come from each conversation's `projectDir` (the cwd
+// extracted from the transcript). Do NOT use the project's `path` (that is only
+// the jsonl folder ~/.claude/projects/<slug>) and do NOT decode the slug name —
+// a '-' inside a real folder name like "my-space" collides with the '/' separator
+// and yields a wrong directory (my-space -> my/space).
 const knownProjects = computed(() => {
-  const list = (projectsStore.projects || []).map((p) => {
-    // The raw project `name` is the encoded cwd slug; decode it into a real path.
-    const decoded = p.name ? decodeProjectDirName(p.name) : null;
-    return { path: decoded || p.path, raw: p };
-  }).filter((p) => p.path);
-  // Deduplicate by path (same dir could appear via multiple encoded names).
   const seen = new Set();
-  return list.filter((p) => {
-    if (seen.has(p.path)) return false;
-    seen.add(p.path);
-    return true;
-  });
+  const list = [];
+  for (const p of projectsStore.projects || []) {
+    for (const conv of (p.conversations || [])) {
+      const dir = conv?.projectDir;
+      if (dir && !seen.has(dir)) {
+        seen.add(dir);
+        list.push({ path: dir });
+      }
+    }
+  }
+  return list;
 });
 
 const emptyForm = () => ({
