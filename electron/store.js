@@ -482,7 +482,7 @@ class Store {
     if (row.app_secret && row.app_secret.startsWith('ENC:') && this._safeStorage) {
       try {
         const buf = Buffer.from(row.app_secret.slice(4), 'base64');
-        row.app_secret = this._safeStorage.decryptBuffer(buf).toString('utf-8');
+        row.app_secret = this._safeStorage.decryptString(buf);
       } catch {
         // Decryption failed (different machine/keychain?) — treat as empty
         row.app_secret = '';
@@ -813,7 +813,7 @@ class Store {
     if (s.startsWith('ENC:') && this._safeStorage) {
       try {
         const buf = Buffer.from(s.slice(4), 'base64');
-        return this._safeStorage.decryptBuffer(buf).toString('utf-8');
+        return this._safeStorage.decryptString(buf);
       } catch {
         return '';
       }
