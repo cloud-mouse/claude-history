@@ -72,7 +72,16 @@ class BotManager {
     this._hooksStarted = true;
   }
 
-  getRuntime(botId) { return this.runtimes.get(botId) || null; }
+  // botId arrives as different types across callers: the runtimes Map is keyed
+  // by the numeric bot.id (feishu_bots.id INTEGER PK), but hook/card paths
+  // receive it as a string (env var / JSON callback value). Normalize here so
+  // Map.get always hits the numeric key — otherwise getRuntime("1") misses the
+  // runtime and sensitive tools fail-closed with "no reachable bot".
+  getRuntime(botId) {
+    if (botId == null || botId === '') return null;
+    const key = typeof botId === 'number' ? botId : Number(botId);
+    return Number.isNaN(key) ? null : (this.runtimes.get(key) || null);
+  }
 
   async _startRuntime(bot) {
     let rt = this.runtimes.get(bot.id);
@@ -108,7 +117,7 @@ class BotManager {
    * removes bot + binding in one store transaction (design §10.3).
    */
   async deleteBot(botId) {
-    const rt = this.runtimes.get(botId);
+    const rt = this.getRuntime(botId);
     if (rt) {
       await rt.stop().catch(() => {});
       this.runtimes.delete(botId);
@@ -129,7 +138,7 @@ class BotManager {
     } else {
       // Stop but keep the runtime in the map: a residual spawn's hook can still
       // resolve via getRuntime and hit fail-closed (design §5.1).
-      const rt = this.runtimes.get(botId);
+      const rt = this.getRuntime(botId);
       if (rt) await rt.stop().catch(() => {});
     }
     this.broadcastStatus();
@@ -151,7 +160,7 @@ class BotManager {
     }
     const sessionId = path.basename(jsonlPath, '.jsonl');
     const binding = this.store.upsertBindingByBot(botId, { jsonlPath, sessionId, projectDir: bot.project_dir });
-    const rt = this.runtimes.get(botId);
+    const rt = this.getRuntime(botId);
     if (rt) rt.watchActiveBinding();
     this.broadcastStatus();
     return binding;
@@ -159,7 +168,7 @@ class BotManager {
 
   unbindBot(botId) {
     this.store.clearBindingByBot(botId);
-    const rt = this.runtimes.get(botId);
+    const rt = this.getRuntime(botId);
     if (rt) rt._unwatch();
     this.broadcastStatus();
   }
