@@ -422,6 +422,13 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  /* Match the panel background so the divider gap blends with the adjacent
+     panels instead of showing the raw desktop through the frosted glass
+     (which looked jarring on light wallpapers). */
+  background: var(--bg-panel);
+  /* A touch more transparent than the main panels so the divider reads as a
+     distinct narrow strip between them rather than blending in completely. */
+  opacity: 0.8;
 }
 
 .expand-btn {
