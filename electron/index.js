@@ -2,11 +2,11 @@ const { app, BrowserWindow, Menu, ipcMain, safeStorage, session, shell } = requi
 const path = require('path');
 const { registerIpcHandlers } = require('./ipc-handlers');
 const { registerFeishuIpc } = require('./feishu-ipc');
-const { FeishuBridge } = require('./feishu');
+const { BotManager } = require('./feishu');
 const { initUpdater, registerUpdaterIpc, isForceRestart, checkForUpdates } = require('./updater');
 
 let mainWindow;
-let feishuBridge = null;
+let botManager = null;
 
 /**
  * Apply (or re-apply) the native frosted-glass material to a BrowserWindow
@@ -127,12 +127,10 @@ function createWindow() {
     registerUpdaterIpc();
   }
 
-  // Initialize Feishu bridge
-  feishuBridge = new FeishuBridge(store, mainWindow);
-  registerFeishuIpc(ipcMain, feishuBridge, store);
-
-  // Migrate credentials from cc-connect if available
-  feishuBridge.migrateFromCcConnect();
+  // Initialize Feishu multi-bot manager (construction is cheap; loadAll() boots
+  // the shared hooks server + enabled bots after safeStorage is injected).
+  botManager = new BotManager(store, mainWindow);
+  registerFeishuIpc(ipcMain, botManager, store);
 }
 
 // Build the application menu bar.
@@ -255,17 +253,15 @@ app.whenReady().then(() => {
   const store = getStore();
   store.setSafeStorage(safeStorage);
 
-  // Auto-start Feishu bridge if credentials are configured
+  // Migrate to multi-bot schema (safeStorage is now injected, so cc-connect
+  // rescued secrets encrypt), then boot the shared hooks server + enabled bots.
   try {
-    const store = getStore();
-    const config = store.getFeishuConfig();
-    if (config && config.app_id && config.app_secret) {
-      feishuBridge.start().catch(err => {
-        console.error('[feishu] Auto-start failed:', err.message);
-      });
-    }
+    store.migrateToMultiBot();
+    botManager.loadAll().catch(err => {
+      console.error('[feishu] loadAll failed:', err.message);
+    });
   } catch (e) {
-    // Store might not be ready yet
+    console.error('[feishu] migration/startup failed:', e.message);
   }
 
   // Auto-check for updates after 3 seconds (production only)
@@ -285,8 +281,7 @@ app.whenReady().then(() => {
     backfillAllPending(store, { limit: STARTUP_LIMIT, onProgress: ({ scanned, total, updated }) => {
       if (scanned === total) console.log(`[backfill] done: ${updated}/${total} conversations re-indexed`);
     } }).catch(err => console.warn('[backfill] error:', err.message));
-    // Purge Feishu attachment downloads older than 7 days so the dir stays bounded.
-    try { require('./feishu/bridge').cleanOldAttachments(); } catch (e) { console.warn('[feishu] attachment cleanup failed:', e.message); }
+    // (Feishu attachment cleanup now runs inside BotManager.loadAll().)
   }, 5000);
 });
 
@@ -297,10 +292,10 @@ app.on('window-all-closed', () => {
 let isQuitting = false;
 app.on('before-quit', (e) => {
   if (isQuitting || isForceRestart()) return;
-  if (feishuBridge) {
+  if (botManager) {
     e.preventDefault();
     isQuitting = true;
-    feishuBridge.stop().then(() => {
+    botManager.stopAll().then(() => {
       app.quit();
     }).catch(() => {
       app.quit();

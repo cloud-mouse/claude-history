@@ -26,16 +26,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getFrostedGlass: () => ipcRenderer.invoke('appearance:getFrostedGlass'),
   setFrostedGlass: (enabled) => ipcRenderer.invoke('appearance:setFrostedGlass', enabled),
 
-  // Feishu bridge API
+  // Feishu multi-bot API
   feishuGetStatus: () => ipcRenderer.invoke('feishu:getStatus'),
-  feishuGetConfig: () => ipcRenderer.invoke('feishu:getConfig'),
-  feishuSaveConfig: (config) => ipcRenderer.invoke('feishu:saveConfig', config),
-  feishuGetAllowedUsers: () => ipcRenderer.invoke('feishu:getAllowedUsers'),
-  feishuSetAllowedUsers: (users) => ipcRenderer.invoke('feishu:setAllowedUsers', users),
-  feishuStart: () => ipcRenderer.invoke('feishu:start'),
-  feishuStop: () => ipcRenderer.invoke('feishu:stop'),
-  feishuBindSession: (opts) => ipcRenderer.invoke('feishu:bindSession', opts),
-  feishuUnbindSession: () => ipcRenderer.invoke('feishu:unbindSession'),
+  feishuCreateBot: (data) => ipcRenderer.invoke('feishu:createBot', data),
+  feishuUpdateBot: (data) => ipcRenderer.invoke('feishu:updateBot', data),
+  feishuDeleteBot: (botId) => ipcRenderer.invoke('feishu:deleteBot', botId),
+  feishuToggleBot: (data) => ipcRenderer.invoke('feishu:toggleBot', data),
+  feishuListBindableBots: (projectDir) => ipcRenderer.invoke('feishu:listBindableBots', { projectDir }),
+  feishuBindSessionToBot: (data) => ipcRenderer.invoke('feishu:bindSessionToBot', data),
+  feishuRebindSessionToBot: (data) => ipcRenderer.invoke('feishu:rebindSessionToBot', data),
+  feishuUnbindBot: (botId) => ipcRenderer.invoke('feishu:unbindBot', { botId }),
   feishuGetBinding: (jsonlPath) => ipcRenderer.invoke('feishu:getBinding', jsonlPath),
 
   // Updater API

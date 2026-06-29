@@ -52,13 +52,16 @@ function resolveClaudeBinary() {
   return 'claude';
 }
 
-function generateHookSettings(hookPort, hookToken) {
+function generateHookSettings(hookPort, hookToken, botId, chatId) {
   const hookScriptPath = path.join(__dirname, '..', 'feishu-hook-script.js');
+  // botId/chatId are injected so the hook handler can route the confirmation
+  // card back to the originating bot+chat (design §8.2).
+  const env = `FEISHU_HOOK_PORT=${hookPort} FEISHU_HOOK_TOKEN=${hookToken} FEISHU_BOT_ID=${botId ?? ''} FEISHU_CHAT_ID=${chatId ?? ''}`;
   const settings = {
     hooks: {
       PreToolUse: [{
         matcher: 'Bash|Write|Edit|MultiEdit',
-        hooks: [{ type: 'command', command: `FEISHU_HOOK_PORT=${hookPort} FEISHU_HOOK_TOKEN=${hookToken} node ${hookScriptPath}`, timeout: 60 }]
+        hooks: [{ type: 'command', command: `${env} node ${hookScriptPath}`, timeout: 60 }]
       }]
     }
   };
@@ -80,14 +83,14 @@ function generateHookSettings(hookPort, hookToken) {
  * @param {string} opts.permissionMode - internal PermissionManager mode (default|plan|acceptEdits|bypass)
  * @param {Function} [opts.onSpawn] - invoked with the child process so the caller can store/kill it
  */
-function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, hookToken, permissionMode, onSpawn, onToolUse, onProgress, addDirs }) {
+function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, hookToken, botId, chatId, botProjectDir, permissionMode, onSpawn, onToolUse, onProgress, addDirs }) {
   return new Promise((resolve, reject) => {
     const args = ['-p', message, '--output-format', 'stream-json', '--verbose', '--permission-mode', toClaudePermissionMode(permissionMode)];
     if (model) args.push('--model', model);
 
     let settingsPath = null;
     if (hookPort && hookToken) {
-      settingsPath = generateHookSettings(hookPort, hookToken);
+      settingsPath = generateHookSettings(hookPort, hookToken, botId, chatId);
       args.push('--settings', settingsPath);
     }
     // Grant Claude read access to extra dirs (e.g. the attachment download dir).
@@ -96,7 +99,9 @@ function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, hookToken
     }
 
     const { resolveCwd } = require('./binding');
-    const cwd = resolveCwd(jsonlPath);
+    // Lock cwd to the bot's project_dir (prd §4); fall back to slug decoding
+    // only when no bot dir is available.
+    const cwd = botProjectDir || resolveCwd(jsonlPath);
     if (fs.existsSync(jsonlPath)) args.push('--resume', sessionId);
 
     const claudeBin = resolveClaudeBinary();

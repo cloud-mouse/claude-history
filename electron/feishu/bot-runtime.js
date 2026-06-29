@@ -7,27 +7,22 @@ const crypto = require('crypto');
 const { WSClient, EventDispatcher, Client } = require('@larksuiteoapi/node-sdk');
 
 const { PermissionManager } = require('./permissions');
-const { HooksHandler } = require('./hooks-handler');
 const { handleCommand } = require('./commands');
 const { spawnClaude } = require('./claude-spawn');
 const { resolveCwd, watchBinding } = require('./binding');
-const { buildResponseCard, buildProgressCard, buildErrorCard, buildWarningCard, buildConfirmResultCard, extractCardText } = require('./cards');
+const { buildResponseCard, buildProgressCard, buildErrorCard, buildWarningCard, buildConfirmResultCard, buildSwitchConfirmCard, extractCardText } = require('./cards');
 
-const CC_DIR = () => path.join(os.homedir(), '.cc-connect');
-
-// Per-chat attachment download root. Each chat gets its own subdir so one chat's
-// Claude can't Read another chat's attachments (privacy isolation).
+// Per-bot attachment download root. Keyed by bot+chat so one bot/chat's Claude
+// can't Read another's attachments (privacy isolation, design §7).
 const ATTACHMENTS_DIR = () => path.join(os.homedir(), '.claude-history', 'attachments');
 
-// Safe filesystem name for a chat id (used as the per-chat subdir).
-function attachmentDirForChat(chatId) {
-  const safe = String(chatId || 'shared').replace(/[^\w.-]/g, '_');
+function attachmentDirForBotChat(botId, chatId) {
+  const safe = `${botId}_${String(chatId || 'shared')}`.replace(/[^\w.-]/g, '_');
   return path.join(ATTACHMENTS_DIR(), safe);
 }
 
 // Sniff a real image extension from file magic bytes. Feishu image messages carry
-// no mime type, so we detect png/jpg/webp/gif from the downloaded bytes instead
-// of assuming .png.
+// no mime type, so we detect png/jpg/webp/gif from the downloaded bytes instead.
 function detectImageExt(filePath) {
   let fd;
   try {
@@ -44,39 +39,35 @@ function detectImageExt(filePath) {
 }
 
 /**
- * Delete attachment files older than maxAgeDays. Called once at startup so the
- * attachments dir doesn't grow unbounded. Best-effort: never throws.
+ * One bot's runtime: an independent Feishu app connection plus all per-bot
+ * state (spawn, progress card, permissions, file watch). Produced by splitting
+ * the old FeishuBridge singleton (design §5.2). The BotManager owns the shared
+ * HooksHandler; a BotRuntime must never start/stop that HTTP server.
  */
-function cleanOldAttachments(maxAgeDays = 7) {
-  const root = ATTACHMENTS_DIR();
-  let entries;
-  try { entries = fs.readdirSync(root, { withFileTypes: true }); } catch { return; }
-  const cutoff = Date.now() - maxAgeDays * 86400000;
-  for (const ent of entries) {
-    const p = path.join(root, ent.name);
-    try {
-      if (ent.isDirectory()) {
-        for (const f of fs.readdirSync(p, { withFileTypes: true })) {
-          const fp = path.join(p, f.name);
-          try { if (fs.statSync(fp).mtimeMs < cutoff) fs.unlinkSync(fp); } catch {}
-        }
-        try { if (fs.readdirSync(p).length === 0) fs.rmdirSync(p); } catch {}
-      } else if (fs.statSync(p).mtimeMs < cutoff) {
-        fs.unlinkSync(p);
-      }
-    } catch {}
-  }
-}
-
-class FeishuBridge {
-  constructor(store, mainWindow) {
+class BotRuntime {
+  /**
+   * @param {object} bot - feishu_bots row (app_secret is ENC: ciphertext)
+   * @param {import('../store').Store} store
+   * @param {Electron.BrowserWindow} mainWindow
+   * @param {import('./hooks-handler').HooksHandler} hooksHandler - shared singleton
+   * @param {import('./bot-manager').BotManager} botManager - for aggregated status broadcast
+   */
+  constructor(bot, store, mainWindow, hooksHandler, botManager) {
+    this.bot = bot;
+    this.botId = bot.id;
     this.store = store;
     this.mainWindow = mainWindow;
+    this.hooksHandler = hooksHandler;
+    this.botManager = botManager;
+
+    // Per-bot Feishu app connection.
     this.wsClient = null;
     this.eventDispatcher = null;
     this.client = null;
+
+    // Per-bot runtime state (was global on FeishuBridge).
+    this.permissions = new PermissionManager();
     this._seenMsgIds = new Set();
-    this._connected = false;
     this._processing = false;
     this._claudeProcess = null;
     this._model = null;
@@ -85,46 +76,61 @@ class FeishuBridge {
     this._terminatedByUser = false;
     this._unwatchCleanup = null;
     this._legacyConfirmations = new Map();
+    this._switchPending = new Map(); // requestId → { sessionId, jsonlPath, timeout }
 
-    // Streaming progress card state (function 2).
+    // Streaming progress card state.
     this._progressCardId = null;
     this._progressState = null;
     this._progressFlushTimer = null;
 
-    this._permissions = new PermissionManager();
-    this._hooksHandler = new HooksHandler(
-      this._permissions,
-      (chatId, card) => this._sendCard(chatId, card),
-      (msgId, card) => this._updateCard(msgId, card),
-      () => this._getActiveChatId()
-    );
+    // Lifecycle guard (design §6.4): dispatcher callbacks captured a generation;
+    // stop() bumps it so stale events from a not-yet-closed socket are dropped.
+    this.active = false;
+    this.generation = 0;
+    this.online = false;
   }
 
-  get isConnected() { return this._connected; }
+  /** Refresh the bot record in place (after updateBot). */
+  setBot(bot) { this.bot = bot; }
 
   getStatus() {
-    const config = this.store.getFeishuConfig();
-    const binding = this.store.getActiveBinding();
+    const binding = this.store.getActiveBindingByBot(this.botId);
     return {
-      connected: this._connected,
-      enabled: !!(config && config.app_id && config.enabled),
-      hasConfig: !!(config && config.app_id),
-      binding: binding ? { chatId: binding.chat_id, jsonlPath: binding.jsonl_path, sessionId: binding.session_id } : null,
-      processing: this._processing
+      id: this.botId,
+      name: this.bot.name,
+      appId: this.bot.app_id,
+      projectDir: this.bot.project_dir,
+      enabled: !!this.bot.enabled,
+      hasSecret: !!(this.bot.app_secret && this.bot.app_secret !== ''),
+      online: this.online,
+      processing: this._processing,
+      binding: binding ? { jsonlPath: binding.jsonl_path, sessionId: binding.session_id } : null
     };
   }
 
+  _botAllowedUsers() {
+    const raw = this.bot.allowed_users || '';
+    if (!raw) return [];
+    return raw.split(',').map((s) => s.trim()).filter(Boolean);
+  }
+
   async start() {
-    const config = this.store.getFeishuConfig();
-    if (!config || !config.app_id || !config.app_secret) throw new Error('飞书凭证未配置');
-    if (this._connected && this.wsClient) return { success: true, message: 'already connected' };
+    if (this.online && this.wsClient) return { success: true, message: 'already connected' };
 
-    await this._hooksHandler.start();
+    const appSecret = this.store.decryptSecret(this.bot.app_secret);
+    if (!this.bot.app_id || !appSecret) throw new Error('飞书凭证未配置');
 
-    this.client = new Client({ appId: config.app_id, appSecret: config.app_secret });
+    // Bump generation and capture it so callbacks created below reject stale
+    // events after a later stop()/restart (design §6.4).
+    this.generation += 1;
+    const gen = this.generation;
+    this.active = true;
+
+    this.client = new Client({ appId: this.bot.app_id, appSecret });
 
     this.eventDispatcher = new EventDispatcher({}).register({
       'im.message.receive_v1': async (data) => {
+        if (!this.active || gen !== this.generation || !this.client) return;
         try {
           const msg = this._normalizeMessage(data);
           if (!msg) return;
@@ -133,7 +139,7 @@ class FeishuBridge {
           if (this._seenMsgIds.size > 200) this._seenMsgIds = new Set([...this._seenMsgIds].slice(-100));
           await this._handleMessage(msg);
         } catch (err) {
-          console.error('[feishu] Error handling message:', err.message);
+          console.error(`[feishu:bot${this.botId}] Error handling message:`, err.message);
           try {
             const chatId = data?.message?.chat_id;
             if (chatId) await this._sendCard(chatId, buildErrorCard(`内部错误: ${err.message}`));
@@ -141,86 +147,86 @@ class FeishuBridge {
         }
       },
       'card.action.trigger': async (data) => {
+        if (!this.active || gen !== this.generation || !this.client) return { toast: { type: 'error', content: '连接已失效' } };
         let ok = false;
         try { ok = await this._handleCardAction(data); }
-        catch (err) { console.error('[feishu][cardAction] ERROR:', err.message); }
-        // H9: report the real outcome instead of always claiming success.
+        catch (err) { console.error(`[feishu:bot${this.botId}][cardAction] ERROR:`, err.message); }
         return { toast: { type: ok ? 'success' : 'error', content: ok ? '已处理' : '操作未生效（请求已过期或无效）' } };
       },
-      // No-op handlers to suppress "no handle" warnings for common events
       'im.message.reaction.created_v1': async () => {},
       'im.message.reaction.deleted_v1': async () => {},
       'im.chat.member.bot.added_v1': async () => {},
-      'drive.notice.comment_add_v1': async () => {},
+      'drive.notice.comment_add_v1': async () => {}
     });
 
     this.wsClient = new WSClient({
-      appId: config.app_id, appSecret: config.app_secret,
-      onReconnecting: () => { this._connected = false; this._notifyRenderer('feishu:statusChanged', { connected: false }); },
-      onReconnected: () => { this._connected = true; this._notifyRenderer('feishu:statusChanged', { connected: true }); }
+      appId: this.bot.app_id, appSecret,
+      onReconnecting: () => { this.online = false; this.botManager.broadcastStatus(); },
+      onReconnected: () => { this.online = true; this.botManager.broadcastStatus(); }
     });
 
     try {
       await this.wsClient.start({ eventDispatcher: this.eventDispatcher });
-      this._connected = true;
-      this.store.setFeishuEnabled(true);
-      const binding = this.store.getActiveBinding();
+      this.online = true;
+      const binding = this.store.getActiveBindingByBot(this.botId);
       if (binding) this._watchBinding(binding);
+      this.botManager.broadcastStatus();
       return { success: true };
     } catch (err) {
-      this._connected = false;
+      this.online = false;
+      this.botManager.broadcastStatus();
       throw new Error(`飞书连接失败: ${err.message}`);
     }
   }
 
   async stop() {
+    // Full teardown (design §6.4): do NOT only null the three handles — clear
+    // every piece of runtime state so a restart is clean and a stopped bot can't
+    // keep processing. The shared hooksHandler is NOT touched here.
+    this.active = false;
+    this.generation += 1;
     this._unwatch();
     this._killClaudeProcess('SIGTERM');
-    this._hooksHandler.stop();
-    this._processing = false;
+    if (this._progressFlushTimer) { clearTimeout(this._progressFlushTimer); this._progressFlushTimer = null; }
+    for (const [, entry] of this._switchPending) { clearTimeout(entry.timeout); }
+    this._switchPending.clear();
+    this.permissions.clearAll();
+    // Best-effort physical disconnect; the SDK exposes no public stop(), and
+    // autoReconnect defaults on. The real safety boundary is active/generation.
+    try { this.wsClient?.wsConfig?.getWSInstance?.()?.terminate?.(); } catch {}
     this.wsClient = null;
     this.eventDispatcher = null;
     this.client = null;
-    this._connected = false;
-    this.store.setFeishuEnabled(false);
+    this.online = false;
+    this.botManager.broadcastStatus();
     return { success: true };
   }
 
-  async bindSession(jsonlPath, projectDir) {
-    if (!jsonlPath) return { success: false, error: '缺少会话路径' };
-    const realProjectDir = resolveCwd(jsonlPath) || projectDir || process.cwd();
-    const sessionId = path.basename(jsonlPath, '.jsonl');
-    this.store.deactivateAllBindings();
-    const chatId = `_pending_${sessionId.slice(0, 8)}`;
-    this.store.createBinding(chatId, 'p2p', jsonlPath, sessionId, realProjectDir);
-    this._watchBinding({ jsonl_path: jsonlPath, session_id: sessionId });
-    return { success: true, sessionId, jsonlPath, message: '已绑定。发送任意飞书消息给机器人即可关联。' };
+  // ── Bindings (bot-level, design §10) ──
+
+  watchActiveBinding() {
+    const binding = this.store.getActiveBindingByBot(this.botId);
+    this._watchBinding(binding);
+    return binding;
   }
 
-  unbind() {
-    this._unwatch();
-    this.store.deactivateAllBindings();
-    return { success: true };
-  }
-
-  // ── Message Handling ──
+  // ── Message Handling (design §7) ──
 
   async _handleMessage(msg) {
     const chatId = msg.chatId;
-    const chatType = msg.chatType || 'p2p';
     const messageText = this._extractText(msg);
 
-    // C2: enforce sender allowlist. Empty list = allow everyone (backward-compatible).
-    const allowed = this.store.getAllowedUsers();
+    // Allowlist comes from the bot record (empty = allow everyone).
+    const allowed = this._botAllowedUsers();
     if (allowed.length > 0 && !allowed.includes(msg.senderOpenId)) {
       await this._sendCard(chatId, buildWarningCard('🚫 无权限', '你没有权限使用此机器人。请联系所有者在桌面端配置白名单。')).catch(() => {});
       return;
     }
 
     if (messageText.startsWith('/')) {
-      const binding = this.store.getBindingByChatId(chatId) || this._tryPendingBinding(chatId, chatType);
+      const binding = this.store.getActiveBindingByBot(this.botId);
       await handleCommand({
-        chatId, text: messageText, binding,
+        botId: this.botId, runtime: this, chatId, text: messageText, binding,
         sendCard: (id, card) => this._sendCard(id, card),
         killClaude: () => this._killClaudeProcess('SIGTERM'),
         getProcessing: () => this._processing,
@@ -231,23 +237,21 @@ class FeishuBridge {
         setLastMessage: (v) => { this._lastMessage = v; },
         getConfirmMode: () => this._confirmMode,
         setConfirmMode: (v) => { this._confirmMode = v; },
-        permissions: this._permissions,
+        permissions: this.permissions,
         notifyRenderer: (ch, d) => this._notifyRenderer(ch, d),
         spawnClaude: (opts) => this._doSpawnClaude(opts),
         store: this.store,
-        args: messageText.split(' ').slice(1).join(' '),
+        args: messageText.split(' ').slice(1).join(' ')
       });
       return;
     }
 
-    let binding = this.store.getBindingByChatId(chatId);
-    if (!binding) binding = this._tryPendingBinding(chatId, chatType);
+    const binding = this.store.getActiveBindingByBot(this.botId);
     if (!binding) {
-      await this._sendCard(chatId, buildWarningCard('😔 未绑定会话', '此飞书会话未绑定到 Claude Code\n\n请在 **claude-history** 桌面应用中点击「绑定到飞书」按钮'));
+      await this._sendCard(chatId, buildWarningCard('😔 未绑定会话', '此机器人未绑定到 Claude Code 会话\n\n请在 **claude-history** 桌面应用中绑定会话')).catch(() => {});
       return;
     }
 
-    // H8: serialize through _withProcessing (replaces manual _processing toggling).
     await this._withProcessing(chatId, async () => {
       const preview = messageText.length > 30 ? messageText.slice(0, 30) + '...' : messageText;
       let reactionId = null;
@@ -259,7 +263,6 @@ class FeishuBridge {
           reactionId = await this._addReaction(msg.messageId, 'Typing');
         }
 
-        // Download image/file attachments and fold their local paths into the message (function 4).
         let fullMessage = messageText;
         const attachments = msg.attachments || [];
         let attachmentDirs = null;
@@ -277,8 +280,7 @@ class FeishuBridge {
           }
           fullMessage = (messageText ? messageText + '\n\n' : '') + refLines.join('\n\n');
           if (!fullMessage.trim()) fullMessage = '请查看附件。';
-          // Grant Claude read access to ONLY this chat's attachment subdir.
-          attachmentDirs = [attachmentDirForChat(chatId)];
+          attachmentDirs = [attachmentDirForBotChat(this.botId, chatId)];
         }
 
         await this._doSpawnClaude({ sessionId: binding.session_id, jsonlPath: binding.jsonl_path, message: fullMessage, chatId, addDirs: attachmentDirs });
@@ -286,9 +288,8 @@ class FeishuBridge {
 
         if (reactionId) this._deleteReaction(msg.messageId, reactionId).catch(() => {});
 
-        // The final answer was rendered into the progress card by _doSpawnClaude.
         this._lastMessage = messageText;
-        this._notifyRenderer('feishu:jsonlChanged', { jsonlPath: binding.jsonl_path, sessionId: binding.session_id });
+        this._notifyRenderer('feishu:jsonlChanged', { jsonlPath: binding.jsonl_path, sessionId: binding.session_id, botId: this.botId });
       } catch (err) {
         if (reactionId) this._deleteReaction(msg.messageId, reactionId).catch(() => {});
         if (!err._cardHandled) await this._sendCard(chatId, buildErrorCard(err.message)).catch(() => {});
@@ -297,38 +298,34 @@ class FeishuBridge {
   }
 
   _doSpawnClaude({ sessionId, jsonlPath, message, chatId, addDirs }) {
-    const hookPort = this._hooksHandler.port;
-    const hookToken = this._hooksHandler.authToken;
+    const hookPort = this.hooksHandler.port;
+    const hookToken = this.hooksHandler.authToken;
     const self = this;
     const preview = String(message || '').slice(0, 40);
 
-    // Open a live progress card before spawning; it evolves into the final answer.
     this._startProgressCard(chatId, preview);
 
     return spawnClaude({
       sessionId, jsonlPath, message,
       model: self._model,
       hookPort, hookToken,
-      permissionMode: self._permissions.mode,
+      botId: self.botId, chatId,
+      botProjectDir: self.bot.project_dir || undefined,
+      permissionMode: self.permissions.mode,
       addDirs,
       onSpawn: (child) => {
-        // C3: keep the real child so /cancel & terminate actually kill it.
         self._claudeProcess = child;
         child.on('close', () => { if (self._claudeProcess === child) self._claudeProcess = null; });
       },
-      onToolUse: () => {}, // sensitive-tool confirmation handled by hooks system
+      onToolUse: () => {},
       onProgress: (patch) => self._onClaudeProgress(patch)
     }).then(({ text, meta }) => {
-      // Record live-run cost/duration (USD cost only available from the result frame).
       if (meta && (meta.costUsd != null || meta.durationMs != null)) {
         try {
           const conv = self.store.getConversationByFilePath(jsonlPath);
-          if (conv) self.store.updateRuntime(conv.id, {
-            costUsd: meta.costUsd, durationMs: meta.durationMs, runAt: Date.now()
-          });
+          if (conv) self.store.updateRuntime(conv.id, { costUsd: meta.costUsd, durationMs: meta.durationMs, runAt: Date.now() });
         } catch (err) { console.warn('[feishu] updateRuntime failed:', err.message); }
       }
-      // Replace the progress card with the final answer (single card evolves).
       return self._finishProgressCard(chatId, text).then(() => text);
     }).catch((err) => {
       self._abortProgressCard(chatId, err.message);
@@ -341,7 +338,7 @@ class FeishuBridge {
     });
   }
 
-  // ── Streaming progress card (function 2) ──
+  // ── Streaming progress card ──
 
   async _startProgressCard(chatId, preview) {
     if (this._progressFlushTimer) { clearTimeout(this._progressFlushTimer); this._progressFlushTimer = null; }
@@ -357,9 +354,6 @@ class FeishuBridge {
     if (patch.type === 'thinking') {
       this._progressState.thinking = patch.text || '';
     } else if (patch.type === 'text') {
-      // stream-json re-emits the assistant message with ACCUMULATED content as it
-      // streams, so appending would duplicate the text. Overwrite to show the
-      // latest tail (consistent with how `thinking` is handled above).
       const t = patch.text || '';
       this._progressState.text = t.length > 2000 ? t.slice(-2000) : t;
     } else if (patch.type === 'tool') {
@@ -371,7 +365,6 @@ class FeishuBridge {
 
   _scheduleProgressFlush() {
     if (this._progressFlushTimer || !this._progressCardId) return;
-    // Throttle: at most one card patch per 1.2s to respect Feishu rate limits.
     this._progressFlushTimer = setTimeout(() => {
       this._progressFlushTimer = null;
       const cardId = this._progressCardId;
@@ -390,7 +383,6 @@ class FeishuBridge {
     if (cardId) {
       await this._updateCard(cardId, card).catch(() => {});
     } else {
-      // Progress card never opened — deliver the answer as a new card.
       await this._sendCard(chatId, card).catch(() => {});
     }
   }
@@ -403,20 +395,20 @@ class FeishuBridge {
     if (cardId) this._updateCard(cardId, buildErrorCard(errMsg)).catch(() => {});
   }
 
-  // H8: single serialized entry point for any spawn path. The check+set is
-  // synchronous so two messages cannot both pass the guard while awaiting IO.
+  // Instance-level serialization: one message at a time per bot, bots run in
+  // parallel (design §5.3). chatId is only used for the "busy" notice.
   async _withProcessing(chatId, fn) {
     if (this._processing) {
-      await this._sendCard(chatId, buildWarningCard('⏳ 请稍候', '正在处理上一条消息，请等待完成后再发送新消息'));
+      await this._sendCard(chatId, buildWarningCard('⏳ 请稍候', '正在处理上一条消息，请等待完成后再发送新消息')).catch(() => {});
       return null;
     }
     this._processing = true;
-    this._notifyRenderer('feishu:statusChanged', { processing: true });
+    this.botManager.broadcastStatus();
     try {
       return await fn();
     } finally {
       this._processing = false;
-      this._notifyRenderer('feishu:statusChanged', { processing: false });
+      this.botManager.broadcastStatus();
     }
   }
 
@@ -427,9 +419,10 @@ class FeishuBridge {
     const messageId = data?.context?.open_message_id || data?.open_message_id;
     if (!value || !value.requestId) return false;
 
-    // New hooks-based permission confirmation
+    // Hooks-based permission confirmation — route via the shared handler, which
+    // resolves the target runtime by value.botId (design §8.2/§8.3).
     if (value.action?.startsWith('hook_')) {
-      return this._hooksHandler.handleCardAction(value);
+      return this.hooksHandler.handleCardAction(value);
     }
 
     // Legacy confirm mode
@@ -446,7 +439,11 @@ class FeishuBridge {
       return false;
     }
 
-    // Legacy tool notification actions
+    // /switch confirmation (design §9, decision 1)
+    if (value.action === 'switch_confirm' || value.action === 'switch_cancel') {
+      return this._resolveSwitch(value, messageId);
+    }
+
     if (value.action === 'terminate') {
       this._terminatedByUser = true;
       this._killClaudeProcess('SIGTERM');
@@ -454,16 +451,59 @@ class FeishuBridge {
       return true;
     }
     if (value.action === 'always_allow') {
-      // H9: whitelist toolName — never let a forged button grant arbitrary tools.
       const { SENSITIVE_TOOLS } = require('./permissions');
       if (value.toolName && SENSITIVE_TOOLS.includes(value.toolName)) {
-        this._permissions.alwaysAllow(value.toolName);
+        this.permissions.alwaysAllow(value.toolName);
         await this._updateCard(messageId, buildConfirmResultCard(`🔓 已始终允许 ${value.toolName}`, 'green'));
         return true;
       }
       return false;
     }
     return false;
+  }
+
+  // ── /switch confirmation (design §9) ──
+
+  /**
+   * Ask the user to confirm switching this bot's binding to a new session.
+   * The target is held in this runtime's _switchPending map (NOT in the card
+   * payload) so a forged button cannot redirect the bot. Returns true if a
+   * confirmation card was sent.
+   */
+  async requestSwitchConfirmation(chatId, { sessionId, jsonlPath, label }) {
+    const requestId = `switch_${crypto.randomUUID()}`;
+    const detail = `**目标会话:** ${label || sessionId.slice(0, 8)}`;
+    const timeout = setTimeout(async () => {
+      const entry = this._switchPending.get(requestId);
+      if (entry && entry.cardMessageId) {
+        await this._updateCard(entry.cardMessageId, buildConfirmResultCard('⏰ 切换已超时', 'grey', detail)).catch(() => {});
+      }
+      this._switchPending.delete(requestId);
+    }, 60_000);
+
+    this._switchPending.set(requestId, { sessionId, jsonlPath, timeout, cardMessageId: null });
+    const card = buildSwitchConfirmCard(requestId, this.botId, detail);
+    const msgId = await this._sendCard(chatId, card).catch(() => null);
+    const entry = this._switchPending.get(requestId);
+    if (entry) entry.cardMessageId = msgId;
+    return true;
+  }
+
+  _resolveSwitch(value, messageId) {
+    const entry = this._switchPending.get(value.requestId);
+    if (!entry) return false;
+    clearTimeout(entry.timeout);
+    this._switchPending.delete(value.requestId);
+    if (value.action === 'switch_cancel') {
+      this._updateCard(messageId, buildConfirmResultCard('❌ 已取消切换', 'grey')).catch(() => {});
+      return true;
+    }
+    this.store.updateBindingByBot(this.botId, { sessionId: entry.sessionId, jsonlPath: entry.jsonlPath });
+    const binding = this.store.getActiveBindingByBot(this.botId);
+    this._watchBinding(binding);
+    this._updateCard(messageId, buildConfirmResultCard('✅ 已切换会话', 'green', `会话: \`${entry.sessionId.slice(0, 8)}...\``)).catch(() => {});
+    this._notifyRenderer('feishu:jsonlChanged', { jsonlPath: entry.jsonlPath, sessionId: entry.sessionId, botId: this.botId });
+    return true;
   }
 
   // ── Pre-execution Confirmation (confirm mode) ──
@@ -485,8 +525,8 @@ class FeishuBridge {
       });
 
       this._sendCard(chatId, this._buildLegacyConfirmCard(requestId, preview))
-        .then(msgId => { const e = this._legacyConfirmations.get(requestId); if (e) e.cardMessageId = msgId; })
-        .catch(err => { clearTimeout(timeout); this._legacyConfirmations.delete(requestId); reject(err); });
+        .then((msgId) => { const e = this._legacyConfirmations.get(requestId); if (e) e.cardMessageId = msgId; })
+        .catch((err) => { clearTimeout(timeout); this._legacyConfirmations.delete(requestId); reject(err); });
     });
   }
 
@@ -498,27 +538,10 @@ class FeishuBridge {
         elements: [
           { tag: 'markdown', content: `> ${preview}\n\nClaude 将处理此消息。是否允许？` },
           {
-            tag: 'column_set',
-            flex_mode: 'flow',
+            tag: 'column_set', flex_mode: 'flow',
             columns: [
-              {
-                tag: 'column', width: 'auto', weight: 1, vertical_align: 'top',
-                elements: [{
-                  tag: 'button',
-                  text: { tag: 'plain_text', content: '✅ 允许' },
-                  type: 'primary',
-                  behaviors: [{ type: 'callback', value: { requestId, action: 'approve' } }]
-                }]
-              },
-              {
-                tag: 'column', width: 'auto', weight: 1, vertical_align: 'top',
-                elements: [{
-                  tag: 'button',
-                  text: { tag: 'plain_text', content: '❌ 拒绝' },
-                  type: 'danger',
-                  behaviors: [{ type: 'callback', value: { requestId, action: 'deny' } }]
-                }]
-              }
+              { tag: 'column', width: 'auto', weight: 1, vertical_align: 'top', elements: [{ tag: 'button', text: { tag: 'plain_text', content: '✅ 允许' }, type: 'primary', behaviors: [{ type: 'callback', value: { requestId, action: 'approve' } }] }] },
+              { tag: 'column', width: 'auto', weight: 1, vertical_align: 'top', elements: [{ tag: 'button', text: { tag: 'plain_text', content: '❌ 拒绝' }, type: 'danger', behaviors: [{ type: 'callback', value: { requestId, action: 'deny' } }] }] }
             ]
           },
           { tag: 'markdown', content: '_⏳ 5 分钟内未操作将自动拒绝_' }
@@ -528,20 +551,6 @@ class FeishuBridge {
   }
 
   // ── Helpers ──
-
-  _getActiveChatId() {
-    const binding = this.store.getActiveBinding();
-    return (binding && !binding.chat_id.startsWith('_pending_')) ? binding.chat_id : null;
-  }
-
-  _tryPendingBinding(chatId, chatType) {
-    const activeBinding = this.store.getActiveBinding();
-    if (activeBinding && activeBinding.chat_id.startsWith('_pending_')) {
-      this.store.createBinding(chatId, chatType, activeBinding.jsonl_path, activeBinding.session_id, activeBinding.project_dir);
-      return this.store.getBindingByChatId(chatId);
-    }
-    return null;
-  }
 
   _extractText(msg) {
     let text = typeof msg.content === 'string' ? msg.content : msg.text || String(msg.content || '');
@@ -559,32 +568,22 @@ class FeishuBridge {
       if (messageType === 'image' && parsed && parsed.image_key) {
         attachments.push({ type: 'image', imageKey: parsed.image_key });
       } else if (messageType === 'file' && parsed && parsed.file_key) {
-        attachments.push({ type: 'file', fileKey: parsed.file_key, fileName: parsed.file_name || 'attachment' });
+        attachments.push({ type: 'file', fileKey: parsed.file_key, fileName: msg.file_name || parsed.file_name || 'attachment' });
       } else {
         text = typeof parsed === 'string' ? parsed : (parsed.text || msg.content || '');
       }
     } catch { text = msg.content || ''; }
     text = text.replace(/^@\S+\s*/, '').trim();
-    // C2: capture sender identity for allowlist enforcement.
-    const senderOpenId = event?.sender?.sender_id?.open_id
-      || event?.event?.sender?.sender_id?.open_id
-      || '';
+    const senderOpenId = event?.sender?.sender_id?.open_id || event?.event?.sender?.sender_id?.open_id || '';
     return { chatId: msg.chat_id, chatType: msg.chat_type || 'p2p', messageType, content: text, text, attachments, messageId: msg.message_id, senderOpenId };
   }
 
-  /**
-   * Download a user-sent image/file attachment to a private dir (function 4).
-   * Must use im.v1.messageResource.get — image.get/file.get only work for
-   * resources the bot itself uploaded.
-   */
   async _downloadAttachment(chatId, messageId, attachment) {
     if (!this.client) throw new Error('飞书未连接，无法下载附件');
-    const dir = attachmentDirForChat(chatId);
+    const dir = attachmentDirForBotChat(this.botId, chatId);
     try { fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); } catch {}
     const key = attachment.imageKey || attachment.fileKey;
     const isImage = attachment.type === 'image';
-    // Images get a real extension sniffed from the downloaded bytes below; use
-    // .png as the initial/fallback name (better than .tmp if sniffing fails).
     const fallbackExt = isImage ? '.png' : (path.extname(attachment.fileName || '') || '.bin');
     const safeName = `${key}`.replace(/[^\w.-]/g, '_');
     const localPath = path.join(dir, safeName + fallbackExt);
@@ -606,8 +605,6 @@ class FeishuBridge {
       throw new Error('无法获取附件下载流');
     }
 
-    // For images, rename to an extension matching the actual bytes (Feishu images
-    // are often jpeg/webp, not png) so the file is identified correctly on disk.
     if (isImage) {
       const realExt = detectImageExt(localPath);
       if (realExt && realExt !== fallbackExt) {
@@ -634,7 +631,6 @@ class FeishuBridge {
     } catch (err) { console.error('[feishu] Failed to send reply:', err.message); }
   }
 
-  /** Add a reaction emoji to a message. Returns the reaction ID, or null. */
   async _addReaction(messageId, emojiType) {
     if (!this.client || !messageId) return null;
     try {
@@ -646,13 +642,10 @@ class FeishuBridge {
     } catch (err) { console.error('[feishu] Failed to add reaction:', err.message); return null; }
   }
 
-  /** Remove a reaction emoji from a message. */
   async _deleteReaction(messageId, reactionId) {
     if (!this.client || !messageId || !reactionId) return;
     try {
-      await this.client.im.v1.messageReaction.delete({
-        path: { message_id: messageId, reaction_id: reactionId }
-      });
+      await this.client.im.v1.messageReaction.delete({ path: { message_id: messageId, reaction_id: reactionId } });
     } catch (err) { console.error('[feishu] Failed to delete reaction:', err.message); }
   }
 
@@ -682,7 +675,7 @@ class FeishuBridge {
     this._unwatch();
     if (!binding || !binding.jsonl_path) return;
     this._unwatchCleanup = watchBinding(binding, (jsonlPath, sessionId) => {
-      this._notifyRenderer('feishu:jsonlChanged', { jsonlPath, sessionId });
+      this._notifyRenderer('feishu:jsonlChanged', { jsonlPath, sessionId, botId: this.botId });
     });
   }
 
@@ -701,30 +694,6 @@ class FeishuBridge {
   _notifyRenderer(channel, data) {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) this.mainWindow.webContents.send(channel, data);
   }
-
-  migrateFromCcConnect() {
-    const config = this.store.getFeishuConfig();
-    if (config && config.app_id) return false;
-    const tomlPath = path.join(CC_DIR(), 'config.toml');
-    if (!fs.existsSync(tomlPath)) return false;
-    try {
-      const smolTOML = require('smol-toml');
-      const data = smolTOML.parse(fs.readFileSync(tomlPath, 'utf-8'));
-      const projects = data.projects;
-      if (!Array.isArray(projects)) return false;
-      for (const project of projects) {
-        const platforms = project.platforms;
-        if (!Array.isArray(platforms)) continue;
-        for (const platform of platforms) {
-          if (platform.type === 'feishu' && platform.options) {
-            const { app_id, app_secret } = platform.options;
-            if (app_id && app_secret) { this.store.saveFeishuConfig(app_id, app_secret); return true; }
-          }
-        }
-      }
-    } catch (err) { console.warn('[feishu] Failed to migrate from cc-connect:', err.message); }
-    return false;
-  }
 }
 
-module.exports = { FeishuBridge, cleanOldAttachments };
+module.exports = { BotRuntime, attachmentDirForBotChat };

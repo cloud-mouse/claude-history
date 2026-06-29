@@ -199,7 +199,7 @@ function buildToolDetail(toolName, toolInput, cwd) {
  * Build a permission confirmation card for a tool call.
  * This is the NEW card for the hooks-based interaction.
  */
-function buildPermissionCard(requestId, toolName, toolInput, cwd) {
+function buildPermissionCard(requestId, toolName, toolInput, cwd, botId) {
   const detail = buildToolDetail(toolName, toolInput, cwd);
 
   return {
@@ -222,7 +222,7 @@ function buildPermissionCard(requestId, toolName, toolInput, cwd) {
                 tag: 'button',
                 text: { tag: 'plain_text', content: '✅ 允许' },
                 type: 'primary',
-                behaviors: [{ type: 'callback', value: { requestId, action: 'hook_allow' } }]
+                behaviors: [{ type: 'callback', value: { requestId, action: 'hook_allow', botId } }]
               }]
             },
             {
@@ -231,7 +231,7 @@ function buildPermissionCard(requestId, toolName, toolInput, cwd) {
                 tag: 'button',
                 text: { tag: 'plain_text', content: '❌ 拒绝' },
                 type: 'danger',
-                behaviors: [{ type: 'callback', value: { requestId, action: 'hook_deny' } }]
+                behaviors: [{ type: 'callback', value: { requestId, action: 'hook_deny', botId } }]
               }]
             },
             {
@@ -240,12 +240,58 @@ function buildPermissionCard(requestId, toolName, toolInput, cwd) {
                 tag: 'button',
                 text: { tag: 'plain_text', content: '🔓 始终允许' },
                 type: 'primary',
-                behaviors: [{ type: 'callback', value: { requestId, action: 'hook_always_allow', toolName } }]
+                behaviors: [{ type: 'callback', value: { requestId, action: 'hook_always_allow', toolName, botId } }]
               }]
             }
           ]
         },
         { tag: 'markdown', content: '_⏳ 等待确认... (60s 超时)_' }
+      ]
+    }
+  };
+}
+
+/**
+ * Build a /switch confirmation card. botId is embedded in every button value so
+ * the handler resolves the right runtime even if Feishu doesn't route card
+ * events per-app (design §8.3, §9 decision 1).
+ */
+function buildSwitchConfirmCard(requestId, botId, detail) {
+  return {
+    schema: '2.0',
+    config: { width_mode: 'fill' },
+    header: {
+      title: { tag: 'plain_text', content: '🔄 切换会话确认' },
+      template: 'orange'
+    },
+    body: {
+      elements: [
+        { tag: 'markdown', content: `${detail}\n\n机器人为单绑定模式：切换会话将替换当前绑定。是否确认？` },
+        {
+          tag: 'column_set',
+          flex_mode: 'flow',
+          columns: [
+            {
+              tag: 'column', width: 'auto', weight: 1, vertical_align: 'top',
+              elements: [{
+                tag: 'button',
+                text: { tag: 'plain_text', content: '✅ 确认切换' },
+                type: 'primary',
+                behaviors: [{ type: 'callback', value: { requestId, action: 'switch_confirm', botId } }]
+              }]
+            },
+            {
+              tag: 'column', width: 'auto', weight: 1, vertical_align: 'top',
+              elements: [{
+                tag: 'button',
+                text: { tag: 'plain_text', content: '❌ 取消' },
+                type: 'danger',
+                behaviors: [{ type: 'callback', value: { requestId, action: 'switch_cancel', botId } }]
+              }]
+            }
+          ]
+        },
+        { tag: 'markdown', content: '_⏳ 60 秒内未操作将自动取消_' }
       ]
     }
   };
@@ -310,6 +356,7 @@ module.exports = {
   buildWarningCard,
   buildConfirmResultCard,
   buildPermissionCard,
+  buildSwitchConfirmCard,
   buildToolDetail,
   extractCardText,
   smartTruncate

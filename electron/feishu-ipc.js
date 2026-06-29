@@ -1,109 +1,106 @@
 'use strict';
 
-function registerFeishuIpc(ipcMain, bridge, store) {
-  // 1. feishu:getStatus — Get connection status and binding info
+/**
+ * Multi-bot IPC handlers (design §11). The renderer never sees an app_secret in
+ * cleartext — create/update return a sanitized bot (hasSecret only), and the
+ * hook confirmation channel is routed per-bot by the spawn-injected botId.
+ */
+function registerFeishuIpc(ipcMain, botManager, store) {
+  // Aggregated status: { bots: [{ id, name, appId, projectDir, enabled, hasSecret, needsProjectDir, online, processing, binding }] }
   ipcMain.handle('feishu:getStatus', async () => {
-    try {
-      return { success: true, ...bridge.getStatus() };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
+    try { return { success: true, ...botManager.getStatus() }; }
+    catch (err) { return { success: false, error: err.message }; }
   });
 
-  // 2. feishu:getConfig — Get Feishu credentials (masked secret)
-  ipcMain.handle('feishu:getConfig', async () => {
+  ipcMain.handle('feishu:createBot', async (_, data) => {
     try {
-      const config = store.getFeishuConfig();
-      return {
-        success: true,
-        appId: config.app_id || '',
-        hasSecret: !!(config.app_secret),
-        enabled: !!(config.enabled)
-      };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
+      const bot = botManager.createBot({
+        name: data.name, appId: data.appId, appSecret: data.appSecret,
+        projectDir: data.projectDir, allowedUsers: data.allowedUsers
+      });
+      return { success: true, bot };
+    } catch (err) { return { success: false, error: err.message }; }
   });
 
-  // 3. feishu:saveConfig — Save Feishu credentials
-  ipcMain.handle('feishu:saveConfig', async (_, { appId, appSecret }) => {
+  ipcMain.handle('feishu:updateBot', async (_, data) => {
     try {
-      store.saveFeishuConfig(appId, appSecret);
+      const fields = {};
+      if (data.name != null) fields.name = data.name;
+      if (data.appSecret != null) fields.appSecret = data.appSecret;
+      if (data.allowedUsers != null) fields.allowedUsers = data.allowedUsers;
+      if (data.enabled != null) fields.enabled = data.enabled;
+      if (data.projectDir != null) fields.projectDir = data.projectDir;
+      const bot = botManager.updateBot(data.botId, fields);
+      return { success: true, bot };
+    } catch (err) { return { success: false, error: err.message }; }
+  });
+
+  // Block deletion of an online or bound bot — caller must stop/unbind first.
+  ipcMain.handle('feishu:deleteBot', async (_, botId) => {
+    try {
+      const status = botManager.getStatus().bots.find((b) => b.id === botId);
+      if (!status) return { success: false, error: '机器人不存在' };
+      if (status.online) return { success: false, error: '请先停用机器人再删除', code: 'BOT_ONLINE' };
+      if (status.binding) return { success: false, error: '请先解绑机器人再删除', code: 'BOT_BOUND' };
+      await botManager.deleteBot(botId);
       return { success: true };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
+    } catch (err) { return { success: false, error: err.message }; }
   });
 
-  // 3b. feishu:getAllowedUsers — Sender allowlist (C2). Empty = allow everyone.
-  ipcMain.handle('feishu:getAllowedUsers', async () => {
+  ipcMain.handle('feishu:toggleBot', async (_, { botId, enabled }) => {
     try {
-      return { success: true, allowedUsers: store.getAllowedUsers() };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
-  });
-
-  // 3c. feishu:setAllowedUsers — Replace the sender allowlist.
-  ipcMain.handle('feishu:setAllowedUsers', async (_, users) => {
-    try {
-      store.setAllowedUsers(Array.isArray(users) ? users : []);
+      if (enabled) {
+        const bot = store.getBot(botId);
+        if (bot && !bot.project_dir) {
+          return { success: false, error: '请先补全服务目录再启用', code: 'NEEDS_PROJECT_DIR' };
+        }
+      }
+      await botManager.toggleBot(botId, enabled);
       return { success: true };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
+    } catch (err) { return { success: false, error: err.message }; }
   });
 
-  // 4. feishu:start — Start WebSocket connection
-  ipcMain.handle('feishu:start', async () => {
+  // Bots whose project_dir matches AND are online; others marked disabled (greyed out in UI).
+  ipcMain.handle('feishu:listBindableBots', async (_, { projectDir }) => {
+    try { return { success: true, bots: botManager.listBindableBots(projectDir) }; }
+    catch (err) { return { success: false, error: err.message }; }
+  });
+
+  // Bind a session to a bot. If the bot is already bound to a different session,
+  // return needsRebind so the UI can show the rebind confirmation first.
+  ipcMain.handle('feishu:bindSessionToBot', async (_, { botId, jsonlPath }) => {
     try {
-      return await bridge.start();
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
+      const bot = store.getBot(botId);
+      if (!bot) return { success: false, error: '机器人不存在' };
+      const existing = store.getActiveBindingByBot(botId);
+      if (existing && existing.jsonl_path !== jsonlPath) {
+        return { success: true, needsRebind: true, currentBinding: { sessionId: existing.session_id, jsonlPath: existing.jsonl_path } };
+      }
+      botManager.bindSessionToBot(botId, jsonlPath);
+      return { success: true, needsRebind: false };
+    } catch (err) { return { success: false, error: err.message }; }
   });
 
-  // 5. feishu:stop — Stop WebSocket connection
-  ipcMain.handle('feishu:stop', async () => {
-    try {
-      return await bridge.stop();
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
+  // Confirmed rebind — overwrite the bot's single binding row.
+  ipcMain.handle('feishu:rebindSessionToBot', async (_, { botId, jsonlPath }) => {
+    try { botManager.bindSessionToBot(botId, jsonlPath); return { success: true }; }
+    catch (err) { return { success: false, error: err.message }; }
   });
 
-  // 6. feishu:bindSession — Bind a conversation to Feishu
-  ipcMain.handle('feishu:bindSession', async (_, { jsonlPath }) => {
-    try {
-      // Derive projectDir from the conversation's project in the database,
-      // NOT from process.cwd() (which is the Electron app's directory).
-      const projectDir = store.getProjectDirForJsonl(jsonlPath) || process.cwd();
-      return bridge.bindSession(jsonlPath, projectDir);
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
+  ipcMain.handle('feishu:unbindBot', async (_, { botId }) => {
+    try { botManager.unbindBot(botId); return { success: true }; }
+    catch (err) { return { success: false, error: err.message }; }
   });
 
-  // 7. feishu:unbindSession — Unbind the active session
-  ipcMain.handle('feishu:unbindSession', async () => {
-    try {
-      return bridge.unbind();
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
-  });
-
-  // 8. feishu:getBinding — Get binding status for a conversation
+  // Given a jsonl, return the bot that has it bound (for UI badges).
   ipcMain.handle('feishu:getBinding', async (_, jsonlPath) => {
     try {
       const binding = store.getBindingByJsonlPath(jsonlPath);
       return { success: true, binding };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
+    } catch (err) { return { success: false, error: err.message }; }
   });
 
-  console.log('[feishu-ipc] All handlers registered');
+  console.log('[feishu-ipc] Multi-bot handlers registered');
 }
 
 module.exports = { registerFeishuIpc };

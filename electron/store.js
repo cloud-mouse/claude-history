@@ -800,6 +800,26 @@ class Store {
     tx();
   }
 
+  /**
+   * Decrypt an app_secret ciphertext (ENC: prefix + safeStorage). Returns '' if
+   * undecryptable (different keychain); plaintext (no ENC: prefix) returned as-is.
+   * Used by BotRuntime.start in the main process only — never sent to the
+   * renderer (design §4.1).
+   */
+  decryptSecret(cipher) {
+    const s = String(cipher || '');
+    if (!s) return '';
+    if (s.startsWith('ENC:') && this._safeStorage) {
+      try {
+        const buf = Buffer.from(s.slice(4), 'base64');
+        return this._safeStorage.decryptBuffer(buf).toString('utf-8');
+      } catch {
+        return '';
+      }
+    }
+    return s;
+  }
+
   _encryptSecret(plain) {
     const s = String(plain || '');
     if (!s) return '';

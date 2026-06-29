@@ -30,20 +30,19 @@ function respond(res, payload, status = 200) {
   res.end(JSON.stringify(payload));
 }
 
+/**
+ * Shared singleton HTTP server that receives PreToolUse hooks from every bot's
+ * spawned Claude. The BotManager owns exactly one instance; each request is
+ * routed to the originating bot's runtime by the botId the spawn injected into
+ * the hook script env (design §8).
+ */
 class HooksHandler {
-  /**
-   * @param {import('./permissions').PermissionManager} permissions
-   * @param {Function} sendCardFn - async (chatId, card) => messageId
-   * @param {Function} updateCardFn - async (messageId, card) => void
-   * @param {Function} getActiveChatIdFn - () => chatId|null
-   */
-  constructor(permissions, sendCardFn, updateCardFn, getActiveChatIdFn) {
-    this._permissions = permissions;
-    this._sendCard = sendCardFn;
-    this._updateCard = updateCardFn;
-    this._getActiveChatId = getActiveChatIdFn;
+  /** @param {import('./bot-manager').BotManager} botManager */
+  constructor(botManager) {
+    this._botManager = botManager;
     this._server = null;
     this._port = null;
+    this._startPromise = null;
     // Per-instance random token shared with the hook script via env var.
     // Defends against local processes / DNS-rebinding forging allow decisions.
     this._authToken = crypto.randomBytes(32).toString('hex');
@@ -56,18 +55,28 @@ class HooksHandler {
   get authToken() { return this._authToken; }
 
   /**
-   * Start the HTTP server. Tries ports BASE_PORT through BASE_PORT + MAX_PORT_ATTEMPTS - 1.
-   * Returns the actual port used.
+   * Start the HTTP server. Idempotent + concurrency-safe: an already-listening
+   * server returns its port, and concurrent callers share the same boot promise
+   * so N bots never spawn N servers on N ports (design §5.1).
    */
-  start() {
+  async start() {
+    if (this._server && this._port) return this._port;
+    if (this._startPromise) return this._startPromise;
+    this._startPromise = this._startServer();
+    try {
+      return await this._startPromise;
+    } finally {
+      this._startPromise = null;
+    }
+  }
+
+  _startServer() {
     return new Promise((resolve, reject) => {
       let attempts = 0;
-
       const tryListen = (port) => {
         const server = http.createServer(async (req, res) => {
           await this._handleRequest(req, res);
         });
-
         server.on('error', (err) => {
           if (err.code === 'EADDRINUSE') {
             attempts++;
@@ -80,7 +89,6 @@ class HooksHandler {
             reject(err);
           }
         });
-
         server.listen(port, '127.0.0.1', () => {
           this._server = server;
           this._port = port;
@@ -88,29 +96,31 @@ class HooksHandler {
           resolve(port);
         });
       };
-
       tryListen(BASE_PORT);
     });
   }
 
-  /** Stop the HTTP server and clear all pending confirmations. */
+  /**
+   * Stop the HTTP server. Does NOT clear pending confirmations — each
+   * BotRuntime clears its own permissions on stop (design §8.3).
+   */
   stop() {
     if (this._server) {
       this._server.close();
       this._server = null;
     }
     this._port = null;
-    this._permissions.clearAll();
   }
 
   /**
    * Handle an incoming HTTP request from feishu-hook-script.js.
-   * POST /hook — tool permission check
+   * POST /hook — tool permission check.
    *
-   * Security: every unrecoverable error path denies sensitive tools
-   * (fail-closed). Non-sensitive tools may still be auto-allowed so benign
-   * reads (Read/Glob/Grep) are not blocked when the confirmation channel is
-   * temporarily unavailable.
+   * Security: non-sensitive tools are auto-allowed (they cannot mutate). Every
+   * unrecoverable path for SENSITIVE tools denies (fail-closed, design §8.4).
+   * botId/chatId are injected by the spawn and carried in the body; if they are
+   * missing we cannot route a confirmation card, so sensitive tools deny while
+   * harmless reads still proceed.
    */
   async _handleRequest(req, res) {
     if (req.method !== 'POST' || !req.url?.startsWith('/hook')) {
@@ -125,72 +135,58 @@ class HooksHandler {
     const authHeader = req.headers['authorization'] || '';
     const expectedAuth = `Bearer ${this._authToken}`;
     if (!isLocalHost || authHeader !== expectedAuth) {
-      // Treat auth failure as a sensitive-tool denial: never allow on forgery.
       respond(res, denyResponse('unauthorized'), 401);
       return;
     }
 
-    // Read request body
     const body = await this._readBody(req);
     let hookData;
     try {
       hookData = JSON.parse(body);
     } catch {
-      // Malformed payload: we cannot tell which tool is being called, so
-      // deny rather than risk auto-executing something sensitive.
       respond(res, denyResponse('malformed hook payload'));
       return;
     }
 
-    const { tool_name, tool_input, tool_use_id, cwd } = hookData;
+    const { tool_name, tool_input, tool_use_id, cwd, botId, chatId } = hookData;
     const isSensitive = SENSITIVE_TOOLS.includes(tool_name);
 
-    // Check if auto-approved (mode-based or explicit allow-list)
-    if (this._permissions.isAutoApproved(tool_name)) {
-      respond(res, allowResponse());
-      return;
-    }
-
-    // Non-sensitive tools that still reach here (e.g. Read in default mode)
-    // are safe to auto-allow — they cannot mutate the system.
+    // Non-sensitive tools (Read/Glob/Grep/…) cannot mutate — allow unconditionally
+    // and do NOT require a reachable bot (design §8.4).
     if (!isSensitive) {
       respond(res, allowResponse());
       return;
     }
 
-    // ── Sensitive tool: MUST get human confirmation (fail-closed below) ──
-    const chatId = this._getActiveChatId();
-    if (!chatId) {
-      // No active chat to surface a confirmation card to → deny.
-      respond(res, denyResponse('no active chat to confirm sensitive tool'));
+    // ── Sensitive tool: MUST route a confirmation card to the originating bot ──
+    const runtime = (botId != null && botId !== '') ? this._botManager.getRuntime(botId) : null;
+    if (!runtime || !runtime.online || !chatId) {
+      respond(res, denyResponse('no reachable bot to confirm sensitive tool'));
       return;
     }
 
-    // Create pending confirmation
-    const requestId = tool_use_id || crypto.randomUUID();
-    const pendingPromise = this._permissions.addPending(requestId, chatId);
+    if (runtime.permissions.isAutoApproved(tool_name)) {
+      respond(res, allowResponse());
+      return;
+    }
 
-    // Send confirmation card to Feishu
-    const card = buildPermissionCard(requestId, tool_name, tool_input || {}, cwd || '');
-    const cardMessageId = await this._sendCard(chatId, card).catch(() => null);
+    const requestId = tool_use_id || crypto.randomUUID();
+    const pendingPromise = runtime.permissions.addPending(requestId, chatId);
+
+    const card = buildPermissionCard(requestId, tool_name, tool_input || {}, cwd || '', botId);
+    const cardMessageId = await runtime._sendCard(chatId, card).catch(() => null);
 
     if (!cardMessageId) {
-      // Could not surface the confirmation card → do NOT auto-allow.
-      this._permissions.resolvePending(requestId, 'deny');
+      runtime.permissions.resolvePending(requestId, 'deny');
       respond(res, denyResponse('failed to send confirmation card'));
       return;
     }
 
-    // Store cardMessageId for later updates
-    const pending = this._permissions.getPending(requestId);
-    if (pending && cardMessageId) {
-      pending.cardMessageId = cardMessageId;
-    }
+    const pending = runtime.permissions.getPending(requestId);
+    if (pending) pending.cardMessageId = cardMessageId;
 
-    // Wait for user response (max 60s — timeout handled in permissions)
     const result = await pendingPromise;
 
-    // Update Feishu card — preserve tool detail for chat history
     if (cardMessageId) {
       const detail = buildToolDetail(tool_name, tool_input || {}, cwd || '');
       const updateCard = result.decision === 'allow'
@@ -198,10 +194,9 @@ class HooksHandler {
         : result.reason === 'timeout'
           ? buildConfirmResultCard('⏰ 已超时 (60s)', 'grey', detail)
           : buildConfirmResultCard('❌ 已拒绝', 'red', detail);
-      await this._updateCard(cardMessageId, updateCard).catch(() => {});
+      await runtime._updateCard(cardMessageId, updateCard).catch(() => {});
     }
 
-    // Respond to hook script
     respond(res, {
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
@@ -215,7 +210,7 @@ class HooksHandler {
   _readBody(req) {
     return new Promise((resolve, reject) => {
       let data = '';
-      const MAX_BODY = 1024 * 1024; // 1MB
+      const MAX_BODY = 1024 * 1024;
       req.on('data', (chunk) => {
         data += chunk;
         if (data.length > MAX_BODY) { req.destroy(); reject(new Error('Body too large')); }
@@ -226,28 +221,29 @@ class HooksHandler {
   }
 
   /**
-   * Resolve a pending hook confirmation from a Feishu card action.
-   * Called by bridge.js when user clicks a button.
+   * Resolve a pending hook confirmation from a Feishu card action. The card's
+   * callback value carries botId (design §8.3) so the correct runtime is found
+   * even if Feishu does not route card events per-app.
    */
   handleCardAction(value) {
     if (!value || !value.requestId) return false;
+    const runtime = (value.botId != null && value.botId !== '') ? this._botManager.getRuntime(value.botId) : null;
+    if (!runtime) return false;
 
     const { requestId, action, toolName } = value;
 
     if (action === 'hook_allow') {
-      return this._permissions.resolvePending(requestId, 'allow');
+      return runtime.permissions.resolvePending(requestId, 'allow');
     }
     if (action === 'hook_deny') {
-      return this._permissions.resolvePending(requestId, 'deny');
+      return runtime.permissions.resolvePending(requestId, 'deny');
     }
     if (action === 'hook_always_allow') {
-      // H9: only allow-list real sensitive tools — reject crafted toolName.
       if (toolName && SENSITIVE_TOOLS.includes(toolName)) {
-        this._permissions.sessionAllow(toolName);
+        runtime.permissions.sessionAllow(toolName);
       }
-      return this._permissions.resolvePending(requestId, 'allow');
+      return runtime.permissions.resolvePending(requestId, 'allow');
     }
-
     return false;
   }
 }

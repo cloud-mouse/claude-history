@@ -5,7 +5,6 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const { buildInfoCard, buildSuccessCard, buildWarningCard, buildErrorCard, buildAckCard } = require('./cards');
-const { resolveCwd } = require('./binding');
 
 function parseCommand(text) {
   const trimmed = text.trim();
@@ -16,10 +15,12 @@ function parseCommand(text) {
 }
 
 /**
- * Dispatch a slash command. ctx provides all bridge dependencies.
+ * Dispatch a slash command. ctx provides the bot runtime + store. binding is the
+ * bot's active binding (getActiveBindingByBot); chat_id is no longer used — the
+ * bot is the routing key (design §9).
  */
 async function handleCommand(ctx) {
-  const { chatId, text, binding } = ctx;
+  const { chatId, text } = ctx;
   const parsed = parseCommand(text);
   if (!parsed) return;
   const { cmd, args } = parsed;
@@ -34,7 +35,6 @@ async function handleCommand(ctx) {
     取消:       () => cmdCancel(ctx),
     new:        () => cmdNew(ctx),
     clear:      () => cmdNew(ctx),
-    cd:         () => cmdCd(ctx),
     model:      () => cmdModel(ctx),
     history:    () => cmdHistory(ctx),
     历史:       () => cmdHistory(ctx),
@@ -63,7 +63,7 @@ async function handleCommand(ctx) {
 
 async function requireBinding(ctx) {
   if (ctx.binding) return true;
-  await ctx.sendCard(ctx.chatId, buildWarningCard('😔 未绑定', '当前没有绑定'));
+  await ctx.sendCard(ctx.chatId, buildWarningCard('😔 未绑定', '当前机器人没有绑定会话'));
   return false;
 }
 
@@ -71,19 +71,18 @@ async function cmdHelp(ctx) {
   const content = [
     '**基础命令**',
     '`/help` — 显示本帮助信息',
-    '`/status` — 查看连接状态和绑定信息',
+    '`/status` — 查看机器人状态和绑定信息',
     '`/bind` — 查看当前绑定详情',
     '`/cancel` — 取消正在处理的任务',
     '',
     '**会话管理**',
     '`/new` `/clear` — 开启全新会话',
-    '`/sessions` — 列出当前项目的所有会话',
-    '`/switch <id>` — 切换到指定会话',
+    '`/sessions` — 列出当前服务目录的所有会话',
+    '`/switch <id>` — 切换到指定会话（需确认）',
     '`/history [n]` — 查看最近 n 条消息（默认 5）',
     '`/repeat` — 重新发送上一条消息',
     '',
-    '**环境配置**',
-    '`/cd <路径>` — 切换工作目录',
+    '**运行配置**',
     '`/model [名称]` — 查看/设置 Claude 模型',
     '`/system <提示>` — 发送系统提示给 Claude',
     '`/confirm [on|off]` — 开启/关闭执行确认',
@@ -91,46 +90,47 @@ async function cmdHelp(ctx) {
     '`/allow <tool>` — 始终允许指定工具',
     '`/disallow <tool>` — 取消始终允许',
     '',
-    '💡 直接发送非 `/` 开头的消息即可与 Claude 对话'
+    '💡 直接发送非 `/` 开头的消息即可与 Claude 对话',
+    '📌 工作目录由机器人的服务目录决定，更换目录需在桌面端删除后重建机器人'
   ].join('\n');
   await ctx.sendCard(ctx.chatId, buildInfoCard('📖 命令手册', content, 'purple'));
 }
 
 async function cmdStatus(ctx) {
-  const { chatId, binding, store, permissions } = ctx;
-  const config = store.getFeishuConfig();
+  const { chatId, binding, permissions, runtime } = ctx;
+  const bot = runtime.bot;
   const lines = [
-    `**连接状态**`,
+    '**机器人状态**',
+    `名称: \`${bot.name}\``,
+    `在线: ${runtime.online ? '✅ 已连接' : '❌ 未连接'}`,
     `处理任务: ${ctx.getProcessing() ? '⏳ 处理中' : '✅ 空闲'}`,
     `模型: \`${ctx.getModel() || '默认'}\``,
     `确认模式: ${ctx.getConfirmMode() ? '🔐 开启' : '🔓 关闭'}`,
     `权限模式: \`${permissions.mode}\``,
-    `凭证: ${config.app_id ? '✅ 已配置' : '❌ 未配置'}`,
   ];
   if (binding) {
-    const cwd = resolveCwd(binding.jsonl_path) || binding.project_dir || '(未知)';
     lines.push('', '**当前绑定**');
     lines.push(`会话: \`${binding.session_id.slice(0, 8)}...\``);
-    lines.push(`项目: \`${cwd}\``);
+    lines.push(`服务目录: \`${bot.project_dir || '(未设置)'}\``);
     const alwaysAllowed = permissions.getAlwaysAllowed();
     if (alwaysAllowed.length > 0) lines.push(`始终允许: \`${alwaysAllowed.join(', ')}\``);
   } else {
-    lines.push('', '📎 绑定: 无（请在桌面端绑定）');
+    lines.push('', '📎 绑定: 无（请在桌面端绑定会话）');
   }
   await ctx.sendCard(chatId, buildInfoCard('📊 系统状态', lines.join('\n'), 'blue'));
 }
 
 async function cmdBind(ctx) {
-  const { chatId, binding } = ctx;
+  const { chatId, binding, runtime } = ctx;
   if (!binding) {
-    await ctx.sendCard(chatId, buildWarningCard('😔 未绑定', '请在 **claude-history** 桌面应用中点击「绑定到飞书」'));
+    await ctx.sendCard(chatId, buildWarningCard('😔 未绑定', '请在 **claude-history** 桌面应用中绑定会话'));
     return;
   }
-  const displayCwd = resolveCwd(binding.jsonl_path) || binding.project_dir;
+  const bot = runtime.bot;
   const content = [
-    `Chat ID: \`${binding.chat_id}\``,
+    `机器人: \`${bot.name}\``,
     `会话 ID: \`${binding.session_id.slice(0, 16)}...\``,
-    `项目目录: \`${displayCwd}\``,
+    `服务目录: \`${bot.project_dir || '(未设置)'}\``,
     `JSONL: \`${path.basename(binding.jsonl_path)}\``,
     `模型: \`${ctx.getModel() || '默认'}\``,
     `权限模式: \`${ctx.permissions.mode}\``,
@@ -150,40 +150,18 @@ async function cmdCancel(ctx) {
 }
 
 async function cmdNew(ctx) {
-  const { chatId, binding, store } = ctx;
+  const { chatId, store, runtime, botId } = ctx;
   if (!await requireBinding(ctx)) return;
+  const realCwd = runtime.bot.project_dir;
+  if (!realCwd) { await ctx.sendCard(chatId, buildErrorCard('机器人未设置服务目录，请在桌面端补全')); return; }
   const newSessionId = crypto.randomUUID();
-  const realCwd = resolveCwd(binding.jsonl_path) || binding.project_dir;
   const slug = realCwd.replace(/\//g, '-');
   const newJsonlPath = path.join(os.homedir(), '.claude', 'projects', slug, `${newSessionId}.jsonl`);
-  store.updateBinding(binding.chat_id, { session_id: newSessionId, jsonl_path: newJsonlPath });
+  store.updateBindingByBot(botId, { sessionId: newSessionId, jsonlPath: newJsonlPath });
+  runtime.watchActiveBinding();
   await ctx.sendCard(chatId, buildSuccessCard('✅ 已开启新会话', [
     `会话 ID: \`${newSessionId.slice(0, 8)}...\``,
     `项目: \`${realCwd}\``, '', '💡 发送消息即可开始新对话'
-  ].join('\n')));
-}
-
-async function cmdCd(ctx) {
-  const { chatId, binding, store } = ctx;
-  const args = ctx.args;
-  if (!await requireBinding(ctx)) return;
-  if (!args) {
-    const realCwd = resolveCwd(binding.jsonl_path) || binding.project_dir;
-    await ctx.sendCard(chatId, buildInfoCard('📂 当前目录', `\`${realCwd}\``, 'indigo'));
-    return;
-  }
-  const baseCwd = resolveCwd(binding.jsonl_path) || binding.project_dir;
-  let targetPath = args.replace(/^~/, os.homedir());
-  if (!path.isAbsolute(targetPath)) targetPath = path.resolve(baseCwd, targetPath);
-  if (!fs.existsSync(targetPath)) { await ctx.sendCard(chatId, buildErrorCard(`路径不存在: ${targetPath}`)); return; }
-  if (!fs.statSync(targetPath).isDirectory()) { await ctx.sendCard(chatId, buildErrorCard(`不是目录: ${targetPath}`)); return; }
-  const newSessionId = crypto.randomUUID();
-  const slug = targetPath.replace(/\//g, '-');
-  const newJsonlPath = path.join(os.homedir(), '.claude', 'projects', slug, `${newSessionId}.jsonl`);
-  store.updateBinding(binding.chat_id, { project_dir: targetPath, session_id: newSessionId, jsonl_path: newJsonlPath });
-  await ctx.sendCard(chatId, buildSuccessCard('✅ 已切换工作目录', [
-    `📂 新目录: \`${targetPath}\``,
-    `🔄 新会话: \`${newSessionId.slice(0, 8)}...\``, '', '💡 目录变更会自动开启新会话'
   ].join('\n')));
 }
 
@@ -220,32 +198,34 @@ async function cmdHistory(ctx) {
 }
 
 async function cmdSessions(ctx) {
-  const { chatId, binding } = ctx;
+  const { chatId, binding, runtime } = ctx;
   if (!await requireBinding(ctx)) return;
-  const realCwd = resolveCwd(binding.jsonl_path) || binding.project_dir;
+  const realCwd = runtime.bot.project_dir;
+  if (!realCwd) { await ctx.sendCard(chatId, buildInfoCard('📭 会话列表', '机器人未设置服务目录', 'grey')); return; }
   const slug = realCwd.replace(/\//g, '-');
   const projectDir = path.join(os.homedir(), '.claude', 'projects', slug);
-  if (!fs.existsSync(projectDir)) { await ctx.sendCard(chatId, buildInfoCard('📭 会话列表', '当前项目暂无会话记录', 'grey')); return; }
+  if (!fs.existsSync(projectDir)) { await ctx.sendCard(chatId, buildInfoCard('📭 会话列表', '当前服务目录暂无会话记录', 'grey')); return; }
   const files = fs.readdirSync(projectDir).filter(f => f.endsWith('.jsonl')).map(f => {
     try { const stat = fs.statSync(path.join(projectDir, f)); return { name: f, mtime: stat.mtime }; } catch { return null; }
   }).filter(Boolean).sort((a, b) => b.mtime - a.mtime).slice(0, 15);
-  if (files.length === 0) { await ctx.sendCard(chatId, buildInfoCard('📭 会话列表', '当前项目暂无会话记录', 'grey')); return; }
+  if (files.length === 0) { await ctx.sendCard(chatId, buildInfoCard('📭 会话列表', '当前服务目录暂无会话记录', 'grey')); return; }
   const lines = [];
   for (let i = 0; i < files.length; i++) {
     const sid = files[i].name.replace('.jsonl', '');
     const current = sid === binding.session_id ? ' ← 当前' : '';
     lines.push(`\`${i + 1}\`. \`${sid.slice(0, 8)}...\` (${files[i].mtime.toLocaleDateString('zh-CN')})${current}`);
   }
-  lines.push('', '💡 使用 `/switch <序号>` 切换会话');
+  lines.push('', '💡 使用 `/switch <序号>` 切换会话（需确认）');
   await ctx.sendCard(chatId, buildInfoCard(`📋 会话列表 (${files.length})`, lines.join('\n'), 'indigo'));
 }
 
 async function cmdSwitch(ctx) {
-  const { chatId, binding, store } = ctx;
+  const { chatId, runtime } = ctx;
   const args = ctx.args;
   if (!await requireBinding(ctx)) return;
   if (!args) { await ctx.sendCard(chatId, buildWarningCard('❌ 缺少参数', '请指定会话序号或 ID\n例: `/switch 1`')); return; }
-  const realCwd = resolveCwd(binding.jsonl_path) || binding.project_dir;
+  const realCwd = runtime.bot.project_dir;
+  if (!realCwd) { await ctx.sendCard(chatId, buildErrorCard('机器人未设置服务目录')); return; }
   const slug = realCwd.replace(/\//g, '-');
   const projectDir = path.join(os.homedir(), '.claude', 'projects', slug);
   if (!fs.existsSync(projectDir)) { await ctx.sendCard(chatId, buildErrorCard('项目目录不存在')); return; }
@@ -259,15 +239,17 @@ async function cmdSwitch(ctx) {
   if (!targetFile) { await ctx.sendCard(chatId, buildErrorCard(`未找到会话: ${args}\n使用 /sessions 查看可用会话`)); return; }
   const newSessionId = targetFile.name.replace('.jsonl', '');
   const newJsonlPath = path.join(projectDir, targetFile.name);
-  store.updateBinding(binding.chat_id, { session_id: newSessionId, jsonl_path: newJsonlPath });
-  await ctx.sendCard(chatId, buildSuccessCard('✅ 已切换会话', [
-    `会话: \`${newSessionId.slice(0, 8)}...\``,
-    `修改时间: ${targetFile.mtime.toLocaleString('zh-CN')}`, '', '💡 发送消息即可继续对话'
-  ].join('\n')));
+  // Bot-level single binding → switching replaces the current binding, so ask
+  // for confirmation via a Feishu card first (design §9, decision 1).
+  await runtime.requestSwitchConfirmation(chatId, {
+    sessionId: newSessionId,
+    jsonlPath: newJsonlPath,
+    label: `${newSessionId.slice(0, 8)}... (${targetFile.mtime.toLocaleDateString('zh-CN')})`
+  });
 }
 
 async function cmdRepeat(ctx) {
-  const { chatId, store } = ctx;
+  const { chatId, store, botId } = ctx;
   if (!await requireBinding(ctx)) return;
   const lastMessage = ctx.getLastMessage();
   if (!lastMessage) { await ctx.sendCard(chatId, buildInfoCard('📭 无消息', '没有上一条消息可重复', 'grey')); return; }
@@ -275,17 +257,16 @@ async function cmdRepeat(ctx) {
   await ctx.sendCard(chatId, buildAckCard(lastMessage.slice(0, 30) + ' (重复)'));
   await ctx.withProcessing(async () => {
     try {
-      const currentBinding = store.getBindingByChatId(chatId);
+      const currentBinding = store.getActiveBindingByBot(botId);
       if (!currentBinding) throw new Error('绑定已失效');
       await ctx.spawnClaude({ sessionId: currentBinding.session_id, jsonlPath: currentBinding.jsonl_path, message: lastMessage, chatId });
-      // The final answer is rendered into the live progress card by spawnClaude.
-      ctx.notifyRenderer('feishu:jsonlChanged', { jsonlPath: currentBinding.jsonl_path, sessionId: currentBinding.session_id });
+      ctx.notifyRenderer('feishu:jsonlChanged', { jsonlPath: currentBinding.jsonl_path, sessionId: currentBinding.session_id, botId });
     } catch (err) { if (!err._cardHandled) await ctx.sendCard(chatId, buildErrorCard(err.message)).catch(() => {}); }
   });
 }
 
 async function cmdSystem(ctx) {
-  const { chatId, store } = ctx;
+  const { chatId, store, botId } = ctx;
   const args = ctx.args;
   if (!await requireBinding(ctx)) return;
   if (!args) { await ctx.sendCard(chatId, buildWarningCard('❌ 缺少参数', '请输入系统提示内容\n例: `/system 你是一个专业的代码审查助手`')); return; }
@@ -293,11 +274,10 @@ async function cmdSystem(ctx) {
   await ctx.sendCard(chatId, buildAckCard(args.slice(0, 50)));
   await ctx.withProcessing(async () => {
     try {
-      const currentBinding = store.getBindingByChatId(chatId);
+      const currentBinding = store.getActiveBindingByBot(botId);
       if (!currentBinding) throw new Error('绑定已失效');
       await ctx.spawnClaude({ sessionId: currentBinding.session_id, jsonlPath: currentBinding.jsonl_path, message: `[System Instruction] ${args}`, chatId });
-      // The final answer is rendered into the live progress card by spawnClaude.
-      ctx.notifyRenderer('feishu:jsonlChanged', { jsonlPath: currentBinding.jsonl_path, sessionId: currentBinding.session_id });
+      ctx.notifyRenderer('feishu:jsonlChanged', { jsonlPath: currentBinding.jsonl_path, sessionId: currentBinding.session_id, botId });
     } catch (err) { if (!err._cardHandled) await ctx.sendCard(chatId, buildErrorCard(err.message)).catch(() => {}); }
   });
 }

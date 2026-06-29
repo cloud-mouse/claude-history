@@ -89,7 +89,13 @@ async function main() {
     return;
   }
 
-  const response = await sendHookRequest(PORT, hookData);
+  // Attach the bot/chat identity injected by the spawn so the handler can route
+  // the confirmation card to the originating bot (design §8.2).
+  const response = await sendHookRequest(PORT, {
+    ...hookData,
+    botId: process.env.FEISHU_BOT_ID || '',
+    chatId: process.env.FEISHU_CHAT_ID || ''
+  });
   process.stdout.write(JSON.stringify(response) + '\n');
 }
 

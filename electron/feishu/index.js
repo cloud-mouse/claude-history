@@ -1,5 +1,5 @@
 'use strict';
 
-const { FeishuBridge } = require('./bridge');
+const { BotManager, cleanOldAttachments } = require('./bot-manager');
 
-module.exports = { FeishuBridge };
+module.exports = { BotManager, cleanOldAttachments };
