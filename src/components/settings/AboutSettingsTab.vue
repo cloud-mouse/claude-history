@@ -17,7 +17,7 @@
     <div v-if="updateStore.latest" class="setting-card">
       <h3 class="card-title">最新版本 v{{ updateStore.latest.version }}</h3>
       <p class="update-date" v-if="updateStore.latest.publishedAt">发布于 {{ formatDate(updateStore.latest.publishedAt) }}</p>
-      <div class="update-notes">{{ updateStore.latest.notes || '暂无更新说明' }}</div>
+      <div class="update-notes markdown" v-html="renderedNotes"></div>
       <div class="update-compare">v{{ updateStore.current }} → v{{ updateStore.latest.version }}</div>
       <button class="btn btn-primary" @click="updateStore.downloadLatest()">
         {{ updateStore.hasUpdate ? '下载最新版本' : '打开下载页' }}
@@ -29,10 +29,18 @@
 </template>
 
 <script setup>
-import { onActivated } from 'vue';
+import { onActivated, computed } from 'vue';
+import { marked } from 'marked';
 import { useUpdateStore } from '../../stores/update';
 
 const updateStore = useUpdateStore();
+
+// Release notes come from GitHub as markdown — render to HTML for readability.
+// Trusted source (maintainer-authored release body).
+const renderedNotes = computed(() => {
+  const notes = updateStore.latest?.notes;
+  return notes ? marked.parse(String(notes), { breaks: true }) : '暂无更新说明';
+});
 
 // Re-check when revisiting the tab so release info is fresh.
 onActivated(() => {
@@ -69,9 +77,39 @@ function formatDate(d) {
 .update-date { font-size: 12px; color: var(--text-muted); margin: 0 0 8px; }
 .update-notes {
   font-size: 13px; color: var(--text-secondary); line-height: 1.7;
-  white-space: pre-line; max-height: 260px; overflow-y: auto;
+  max-height: 260px; overflow-y: auto;
   background: var(--bg-tertiary); border-radius: var(--radius-card);
   padding: 12px 14px; margin-bottom: 12px;
+}
+.update-notes :deep(h1),
+.update-notes :deep(h2),
+.update-notes :deep(h3),
+.update-notes :deep(h4) {
+  font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 12px 0 6px;
+}
+.update-notes :deep(h1):first-child,
+.update-notes :deep(h2):first-child,
+.update-notes :deep(h3):first-child { margin-top: 0; }
+.update-notes :deep(p) { margin: 6px 0; }
+.update-notes :deep(ul),
+.update-notes :deep(ol) { margin: 6px 0; padding-left: 20px; }
+.update-notes :deep(li) { margin: 3px 0; }
+.update-notes :deep(code) {
+  background: var(--bg-secondary); padding: 1px 5px; border-radius: 4px;
+  font-family: var(--font-mono, monospace); font-size: 12px;
+}
+.update-notes :deep(pre) {
+  background: var(--bg-secondary); border-radius: var(--radius-control);
+  padding: 10px 12px; overflow-x: auto; margin: 8px 0;
+}
+.update-notes :deep(pre code) { background: none; padding: 0; font-size: 12px; }
+.update-notes :deep(a) { color: var(--primary); text-decoration: none; }
+.update-notes :deep(a:hover) { text-decoration: underline; }
+.update-notes :deep(strong) { color: var(--text-primary); font-weight: 600; }
+.update-notes :deep(hr) { border: none; border-top: 1px solid var(--border-color); margin: 10px 0; }
+.update-notes :deep(blockquote) {
+  margin: 6px 0; padding-left: 12px; color: var(--text-muted);
+  border-left: 3px solid var(--border-color);
 }
 .update-compare { font-size: 13px; color: var(--text-primary); margin-bottom: 12px; }
 

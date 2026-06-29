@@ -38,7 +38,7 @@
           </thead>
           <tbody>
             <tr v-for="p in statsStore.data.byProject" :key="p.project_id">
-              <td class="proj-name" :title="p.project_path">{{ p.project_name }}</td>
+              <td class="proj-name" :title="p.project_cwd || p.project_path">{{ projectLabel(p) }}</td>
               <td>{{ p.conversations }}</td>
               <td>{{ formatTokens(p.input_tokens) }}</td>
               <td>{{ formatTokens(p.output_tokens) }}</td>
@@ -137,6 +137,17 @@ function formatTokens(n) {
 }
 function shortModel(m) {
   return String(m || '').replace(/^claude-/, '').replace(/-\d{8}$/, '');
+}
+// Show the folder basename; full real cwd on hover. Falls back to the encoded
+// slug only when no conversation has a recorded cwd yet.
+function projectLabel(p) {
+  const cwd = p?.project_cwd;
+  if (cwd) {
+    const trimmed = String(cwd).replace(/\/+$/, '');
+    const slash = trimmed.lastIndexOf('/');
+    return slash >= 0 ? trimmed.slice(slash + 1) : trimmed;
+  }
+  return p?.project_name || '';
 }
 </script>
 

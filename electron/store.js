@@ -385,6 +385,7 @@ class Store {
 
     const byProject = this.db.prepare(
       `SELECT p.id AS project_id, p.name AS project_name, p.path AS project_path,
+              (SELECT project_dir FROM conversations WHERE project_id = p.id AND project_dir IS NOT NULL AND project_dir != '' ORDER BY updated_at DESC LIMIT 1) AS project_cwd,
               COUNT(c.id) AS conversations,
               COALESCE(SUM(c.input_tokens), 0) AS input_tokens,
               COALESCE(SUM(c.output_tokens), 0) AS output_tokens,
