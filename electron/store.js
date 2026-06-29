@@ -2,6 +2,8 @@
 
 const Database = require('better-sqlite3');
 const path = require('path');
+const os = require('os');
+const fs = require('fs');
 
 class Store {
   constructor(dbPath) {
@@ -45,6 +47,26 @@ class Store {
         updated_at INTEGER NOT NULL
       );
 
+      -- Multi-bot: each bot is one Feishu app (design §4.1). feishu_bindings is
+      -- created by migrateToMultiBot() so the legacy chat_id-keyed table can be
+      -- renamed aside and rebuilt as bot_id-keyed in one migration pass.
+      CREATE TABLE IF NOT EXISTS feishu_bots (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        name          TEXT NOT NULL,
+        app_id        TEXT NOT NULL UNIQUE,
+        app_secret    TEXT NOT NULL DEFAULT '',
+        project_dir   TEXT NOT NULL DEFAULT '',
+        allowed_users TEXT NOT NULL DEFAULT '',
+        enabled       INTEGER NOT NULL DEFAULT 0,
+        created_at    INTEGER NOT NULL,
+        updated_at    INTEGER NOT NULL
+      );
+
+      -- Legacy chat-keyed bindings. migrateToMultiBot() renames this aside to
+      -- feishu_bindings_legacy and rebuilds the bot_id-keyed structure (design
+      -- §4.2/§12). Kept here so existing installs (and the migration regression
+      -- test) already have the old table in place when the migration runs;
+      -- CREATE IF NOT EXISTS is a no-op once the new structure exists.
       CREATE TABLE IF NOT EXISTS feishu_bindings (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
         chat_id     TEXT NOT NULL,
@@ -64,7 +86,6 @@ class Store {
 
       CREATE INDEX IF NOT EXISTS idx_conversations_project_id ON conversations(project_id);
       CREATE INDEX IF NOT EXISTS idx_conversations_updated_at ON conversations(updated_at);
-      CREATE INDEX IF NOT EXISTS idx_feishu_bindings_jsonl ON feishu_bindings(jsonl_path);
     `);
 
     // Migration: drop stale unique index on chat_id (was causing rebind failures)
@@ -539,35 +560,330 @@ class Store {
     `).run(value, now);
   }
 
-  // ── Feishu bindings ────────────────────────────────────────────
+  // ── Multi-bot migration (design §12) ──────────────────────────
 
-  createBinding(chatId, chatType, jsonlPath, sessionId, projectDir) {
-    // Deactivate any existing binding first
-    this.db.prepare('UPDATE feishu_bindings SET active = 0 WHERE active = 1').run();
+  /**
+   * One-time migration to the multi-bot schema. Idempotent via the
+   * app_settings.feishu_multi_bot_migrated flag. Run after safeStorage is
+   * injected (e.g. from BotManager.loadAll) so credentials rescued from
+   * cc-connect are encrypted.
+   *
+   * Single transaction: schema upgrade (legacy feishu_bindings → renamed
+   * backup + new bot_id-keyed table) → build bot 1 from feishu_config (with
+   * cc-connect credential rescue) → move at most one legacy binding → flag.
+   */
+  migrateToMultiBot() {
+    if (this.getAppSetting('feishu_multi_bot_migrated') === '1') return;
 
-    // Remove old rows with the same chat_id to avoid stale data
-    this.db.prepare('DELETE FROM feishu_bindings WHERE chat_id = ? AND jsonl_path != ?').run(chatId, jsonlPath);
+    const tx = this.db.transaction(() => {
+      // 1. Detect legacy feishu_bindings (has chat_id column) → rename aside.
+      const cols = this.db.prepare('PRAGMA table_info(feishu_bindings)').all();
+      const hasLegacyBindings = cols.length > 0 && cols.some((c) => c.name === 'chat_id');
+      if (hasLegacyBindings) {
+        this.db.exec('ALTER TABLE feishu_bindings RENAME TO feishu_bindings_legacy');
+      }
 
+      // 2. New feishu_bindings: bot_id UNIQUE, no chat_id/chat_type (design §4.2).
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS feishu_bindings (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          bot_id      INTEGER NOT NULL UNIQUE REFERENCES feishu_bots(id) ON DELETE CASCADE,
+          jsonl_path  TEXT NOT NULL,
+          session_id  TEXT NOT NULL,
+          project_dir TEXT NOT NULL,
+          active      INTEGER NOT NULL DEFAULT 1,
+          created_at  INTEGER NOT NULL,
+          updated_at  INTEGER NOT NULL
+        )
+      `);
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_feishu_bindings_jsonl ON feishu_bindings(jsonl_path)');
+
+      // 3. Source credentials: feishu_config first, then cc-connect rescue.
+      let config = this.db.prepare('SELECT * FROM feishu_config WHERE id = 1').get();
+      if (!config || !config.app_id) {
+        this._rescueCcConnectCredentials();
+        config = this.db.prepare('SELECT * FROM feishu_config WHERE id = 1').get();
+      }
+
+      // 4. Build bot 1 only when a valid app_id exists (design §12).
+      if (config && config.app_id) {
+        const legacyExists = !!this.db.prepare(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='feishu_bindings_legacy'"
+        ).get();
+
+        // project_dir priority: active legacy → latest legacy → empty (design §12).
+        let projectDir = '';
+        if (legacyExists) {
+          const activeRow = this.db.prepare(
+            "SELECT project_dir FROM feishu_bindings_legacy WHERE active = 1 AND project_dir != '' ORDER BY updated_at DESC, created_at DESC LIMIT 1"
+          ).get();
+          if (activeRow) {
+            projectDir = activeRow.project_dir;
+          } else {
+            const latestRow = this.db.prepare(
+              "SELECT project_dir FROM feishu_bindings_legacy WHERE project_dir != '' ORDER BY updated_at DESC, created_at DESC LIMIT 1"
+            ).get();
+            if (latestRow) projectDir = latestRow.project_dir;
+          }
+        }
+
+        const oldEnabled = !!(config && config.enabled);
+        const enabled = oldEnabled && projectDir !== '' ? 1 : 0;
+        const now = Date.now();
+        this.db.prepare(`
+          INSERT INTO feishu_bots (id, name, app_id, app_secret, project_dir, allowed_users, enabled, created_at, updated_at)
+          VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            name = excluded.name,
+            app_id = excluded.app_id,
+            app_secret = excluded.app_secret,
+            project_dir = excluded.project_dir,
+            allowed_users = excluded.allowed_users,
+            enabled = excluded.enabled,
+            updated_at = excluded.updated_at
+        `).run('默认机器人', config.app_id, config.app_secret || '', projectDir, config.allowed_users || '', enabled, now, now);
+
+        // 5. Move at most one legacy binding to bot 1 (bot_id UNIQUE is row-level).
+        if (legacyExists) {
+          let source = this.db.prepare(
+            'SELECT * FROM feishu_bindings_legacy WHERE active = 1 ORDER BY updated_at DESC, created_at DESC LIMIT 1'
+          ).get();
+          if (!source) {
+            source = this.db.prepare(
+              'SELECT * FROM feishu_bindings_legacy ORDER BY updated_at DESC, created_at DESC LIMIT 1'
+            ).get();
+          }
+          if (source) {
+            this.db.prepare(`
+              INSERT INTO feishu_bindings (bot_id, jsonl_path, session_id, project_dir, active, created_at, updated_at)
+              VALUES (1, ?, ?, ?, 1, ?, ?)
+              ON CONFLICT(bot_id) DO UPDATE SET
+                jsonl_path = excluded.jsonl_path,
+                session_id = excluded.session_id,
+                project_dir = excluded.project_dir,
+                active = 1,
+                updated_at = excluded.updated_at
+            `).run(source.jsonl_path, source.session_id, source.project_dir || projectDir, source.created_at || now, source.updated_at || now);
+          }
+        }
+      }
+
+      // 6. Mark migration done.
+      this.setAppSetting('feishu_multi_bot_migrated', '1');
+    });
+
+    tx();
+  }
+
+  /**
+   * Rescue Feishu credentials from the legacy cc-connect config (design §12).
+   * Only writes when feishu_config has no app_id. Mirrors the old
+   * FeishuBridge.migrateFromCcConnect (bridge.js:705), relocated into the store
+   * so the migration owns credential rescue end-to-end.
+   */
+  _rescueCcConnectCredentials() {
+    let tomlPath;
+    try {
+      tomlPath = path.join(os.homedir(), '.cc-connect', 'config.toml');
+    } catch { return; }
+    if (!fs.existsSync(tomlPath)) return;
+    try {
+      const smolTOML = require('smol-toml');
+      const data = smolTOML.parse(fs.readFileSync(tomlPath, 'utf-8'));
+      const projects = data.projects;
+      if (!Array.isArray(projects)) return;
+      for (const project of projects) {
+        const platforms = project.platforms;
+        if (!Array.isArray(platforms)) continue;
+        for (const platform of platforms) {
+          if (platform.type === 'feishu' && platform.options) {
+            const { app_id, app_secret } = platform.options;
+            if (app_id && app_secret) { this.saveFeishuConfig(app_id, app_secret); return; }
+          }
+        }
+      }
+    } catch (err) { console.warn('[store] cc-connect rescue failed:', err.message); }
+  }
+
+  // ── Feishu bots (multi-bot, design §4.1) ──────────────────────
+
+  listBots() {
+    return this.db.prepare('SELECT * FROM feishu_bots ORDER BY id ASC').all();
+  }
+
+  getBot(botId) {
+    return this.db.prepare('SELECT * FROM feishu_bots WHERE id = ?').get(botId) || null;
+  }
+
+  /**
+   * Create a bot. app_id must be globally unique (DB UNIQUE + app-level guard);
+   * throws on duplicate. app_secret is encrypted via safeStorage when available
+   * (ENC: prefix). Created bots default to enabled=0 — enable via toggleBot.
+   */
+  createBot({ name, appId, appSecret, projectDir, allowedUsers }) {
+    const cleanAppId = String(appId || '').trim();
+    if (!cleanAppId) throw new Error('app_id 不能为空');
+    if (this.db.prepare('SELECT 1 FROM feishu_bots WHERE app_id = ?').get(cleanAppId)) {
+      throw new Error('该 app_id 已被其他机器人使用');
+    }
+    const now = Date.now();
+    const result = this.db.prepare(`
+      INSERT INTO feishu_bots (name, app_id, app_secret, project_dir, allowed_users, enabled, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 0, ?, ?)
+    `).run(
+      String(name || '').trim() || cleanAppId,
+      cleanAppId,
+      this._encryptSecret(appSecret),
+      String(projectDir || '').trim(),
+      this._normalizeAllowedUsers(allowedUsers),
+      now, now
+    );
+    return this.getBot(result.lastInsertRowid);
+  }
+
+  /**
+   * Update a bot. app_id is immutable. project_dir is locked once non-empty,
+   * EXCEPT a one-time fill when currently empty (migration legacy, design
+   * §11.1/§12). app_secret is re-encrypted only when a non-empty value is given.
+   */
+  updateBot(botId, fields) {
+    const bot = this.getBot(botId);
+    if (!bot) throw new Error('机器人不存在');
+
+    const sets = [];
+    const values = [];
+
+    if (Object.prototype.hasOwnProperty.call(fields, 'name')) {
+      sets.push('name = ?');
+      values.push(String(fields.name || '').trim() || bot.app_id);
+    }
+    if (Object.prototype.hasOwnProperty.call(fields, 'appSecret') && fields.appSecret) {
+      sets.push('app_secret = ?');
+      values.push(this._encryptSecret(fields.appSecret));
+    }
+    if (Object.prototype.hasOwnProperty.call(fields, 'allowedUsers')) {
+      sets.push('allowed_users = ?');
+      values.push(this._normalizeAllowedUsers(fields.allowedUsers));
+    }
+    if (Object.prototype.hasOwnProperty.call(fields, 'enabled')) {
+      sets.push('enabled = ?');
+      values.push(fields.enabled ? 1 : 0);
+    }
+    if (Object.prototype.hasOwnProperty.call(fields, 'projectDir')) {
+      // Locked once non-empty; only a one-time fill from empty is allowed.
+      if (bot.project_dir && bot.project_dir !== '') {
+        throw new Error('服务目录已锁定，更换目录需删除后重建机器人');
+      }
+      sets.push('project_dir = ?');
+      values.push(String(fields.projectDir || '').trim());
+    }
+
+    if (sets.length === 0) return bot;
+
+    sets.push('updated_at = ?');
+    values.push(Date.now());
+    values.push(botId);
+    this.db.prepare(`UPDATE feishu_bots SET ${sets.join(', ')} WHERE id = ?`).run(...values);
+    return this.getBot(botId);
+  }
+
+  /**
+   * Delete a bot. store.js does not enable PRAGMA foreign_keys, so CASCADE does
+   * not fire — manually delete the bot's binding in the same transaction
+   * (design §10.3). The IPC layer must have already blocked online/bound bots.
+   */
+  deleteBot(botId) {
+    const tx = this.db.transaction(() => {
+      this.db.prepare('DELETE FROM feishu_bindings WHERE bot_id = ?').run(botId);
+      this.db.prepare('DELETE FROM feishu_bots WHERE id = ?').run(botId);
+    });
+    tx();
+  }
+
+  _encryptSecret(plain) {
+    const s = String(plain || '');
+    if (!s) return '';
+    if (this._safeStorage) {
+      try {
+        return 'ENC:' + this._safeStorage.encryptString(s).toString('base64');
+      } catch {
+        return s; // fall back to plaintext if encryption unexpectedly fails
+      }
+    }
+    return s; // safeStorage not injected — plaintext (dev/migration window only)
+  }
+
+  _normalizeAllowedUsers(users) {
+    if (!users) return '';
+    if (Array.isArray(users)) {
+      return users.map((s) => String(s).trim()).filter(Boolean).join(',');
+    }
+    return String(users).split(',').map((s) => s.trim()).filter(Boolean).join(',');
+  }
+
+  // ── Feishu bindings (bot-level, design §4.2) ──────────────────
+
+  /** The active binding for a bot (each bot has at most one row via bot_id UNIQUE). */
+  getActiveBindingByBot(botId) {
+    return this.db.prepare('SELECT * FROM feishu_bindings WHERE bot_id = ? AND active = 1').get(botId) || null;
+  }
+
+  /**
+   * Upsert a bot's binding (active=1). The same bot row is overwritten, so the
+   * previously bound session loses its entry without an explicit unbind (design §10.3).
+   */
+  upsertBindingByBot(botId, { jsonlPath, sessionId, projectDir }) {
     const now = Date.now();
     this.db.prepare(`
-      INSERT INTO feishu_bindings (chat_id, chat_type, jsonl_path, session_id, project_dir, active, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, 1, ?, ?)
-      ON CONFLICT(jsonl_path) DO UPDATE SET
-        chat_id = excluded.chat_id,
-        chat_type = excluded.chat_type,
+      INSERT INTO feishu_bindings (bot_id, jsonl_path, session_id, project_dir, active, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 1, ?, ?)
+      ON CONFLICT(bot_id) DO UPDATE SET
+        jsonl_path = excluded.jsonl_path,
         session_id = excluded.session_id,
         project_dir = excluded.project_dir,
         active = 1,
         updated_at = excluded.updated_at
-    `).run(chatId, chatType, jsonlPath, sessionId, projectDir, now, now);
+    `).run(botId, jsonlPath, sessionId, projectDir, now, now);
+    return this.getActiveBindingByBot(botId);
   }
 
-  getBindingByChatId(chatId) {
-    return this.db.prepare('SELECT * FROM feishu_bindings WHERE chat_id = ? AND active = 1').get(chatId) || null;
+  /** Patch fields on a bot's binding (kept active). Used by /switch, /new. */
+  updateBindingByBot(botId, fields) {
+    const colMap = { sessionId: 'session_id', jsonlPath: 'jsonl_path', projectDir: 'project_dir' };
+    const sets = [];
+    const values = [];
+    for (const [key, value] of Object.entries(fields)) {
+      const col = colMap[key];
+      if (col) {
+        sets.push(`${col} = ?`);
+        values.push(value);
+      }
+    }
+    if (sets.length === 0) return;
+    sets.push('active = 1', 'updated_at = ?');
+    values.push(Date.now());
+    values.push(botId);
+    this.db.prepare(
+      `UPDATE feishu_bindings SET ${sets.join(', ')} WHERE bot_id = ?`
+    ).run(...values);
+  }
+
+  clearBindingByBot(botId) {
+    this.db.prepare('UPDATE feishu_bindings SET active = 0 WHERE bot_id = ?').run(botId);
   }
 
   getBindingByJsonlPath(jsonlPath) {
     return this.db.prepare('SELECT * FROM feishu_bindings WHERE jsonl_path = ? AND active = 1').get(jsonlPath) || null;
+  }
+
+  /**
+   * Legacy compat wrapper (design §4.2): chat_id no longer participates in
+   * binding lookup. Returns the global active binding so BotRuntime can be split
+   * out without a dead intermediate state. Removed after stages 3 (routing) and
+   * 4 (commands) stop referencing it.
+   */
+  getBindingByChatId(_chatId) {
+    return this.getActiveBinding();
   }
 
   getActiveBinding() {
@@ -579,7 +895,9 @@ class Store {
   }
 
   /**
-   * Update specific fields of an active binding identified by chatId.
+   * @deprecated Bot-level bindings replace chat-keyed writes (design §4.2/§9).
+   * Use updateBindingByBot. Retained until commands.js is migrated (stage 4);
+   * the new schema has no chat_id column, so this only runs in dead code paths.
    */
   updateBinding(chatId, fields) {
     const allowed = ['session_id', 'jsonl_path', 'project_dir', 'chat_type'];
