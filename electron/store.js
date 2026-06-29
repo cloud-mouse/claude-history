@@ -705,9 +705,10 @@ class Store {
   }
 
   /**
-   * Update a bot. app_id is immutable. project_dir is locked once non-empty,
-   * EXCEPT a one-time fill when currently empty (migration legacy, design
-   * §11.1/§12). app_secret is re-encrypted only when a non-empty value is given.
+   * Update a bot. app_id is immutable. project_dir is switchable (design
+   * 06-29-feishu-bot-switch-dir); the switch guards (processing / auto-unbind)
+   * live in bot-manager.updateBot — this layer just persists the new value.
+   * app_secret is re-encrypted only when a non-empty value is given.
    */
   updateBot(botId, fields) {
     const bot = this.getBot(botId);
@@ -733,10 +734,9 @@ class Store {
       values.push(fields.enabled ? 1 : 0);
     }
     if (Object.prototype.hasOwnProperty.call(fields, 'projectDir')) {
-      // Locked once non-empty; only a one-time fill from empty is allowed.
-      if (bot.project_dir && bot.project_dir !== '') {
-        throw new Error('服务目录已锁定，更换目录需删除后重建机器人');
-      }
+      // project_dir is switchable (design 06-29-feishu-bot-switch-dir). Switch
+      // guards (processing / auto-unbind) live in bot-manager.updateBot; this
+      // layer just persists the new value. Empty string still normalizes to ''.
       sets.push('project_dir = ?');
       values.push(String(fields.projectDir || '').trim());
     }

@@ -32,7 +32,11 @@ function registerFeishuIpc(ipcMain, botManager, store) {
       if (data.projectDir != null) fields.projectDir = data.projectDir;
       const bot = botManager.updateBot(data.botId, fields);
       return { success: true, bot };
-    } catch (err) { return { success: false, error: err.message }; }
+    } catch (err) {
+      // Preserve a typed code (e.g. BOT_PROCESSING) so the renderer can render a
+      // targeted message instead of a generic error.
+      return { success: false, error: err.message, code: err.code };
+    }
   });
 
   // Block deletion of an online or bound bot — caller must stop/unbind first.

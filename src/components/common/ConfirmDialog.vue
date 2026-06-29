@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <transition name="dialog">
-      <div v-if="show" class="confirm-overlay" @click.self="handleCancel">
+      <div v-if="show" class="confirm-overlay" :style="overlayStyle" @click.self="handleCancel">
         <div class="confirm-dialog" role="dialog" aria-modal="true">
           <div class="confirm-icon" :class="type">
             <svg v-if="type === 'danger'" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -30,7 +30,7 @@
 </template>
 
 <script setup>
-defineProps({
+const props = defineProps({
   show: {
     type: Boolean,
     default: false
@@ -47,8 +47,20 @@ defineProps({
     type: String,
     default: 'warning',
     validator: (value) => ['warning', 'danger'].includes(value)
+  },
+  // Stacking tier for the overlay. Defaults to 9999 (sits above SettingsModal
+  // 1000); pass a higher value when rendering on top of another modal that
+  // also teleports to <body> (e.g. BotEditModal at 10010) so this dialog isn't
+  // covered by the parent modal's overlay.
+  zIndex: {
+    type: [Number, String],
+    default: 9999
   }
 });
+
+// Only apply an inline z-index when a non-default value is passed, so the
+// existing 9999 callers keep relying on the stylesheet and nothing changes.
+const overlayStyle = props.zIndex !== 9999 ? { zIndex: String(props.zIndex) } : null;
 
 const emit = defineEmits(['confirm', 'cancel']);
 

@@ -56,20 +56,18 @@
                 type="text"
                 list="dir-suggestions-bot"
                 placeholder="选择或输入工作目录路径"
-                :disabled="isEdit && bot && bot.projectDir !== ''"
-                :title="(isEdit && bot && bot.projectDir !== '') ? '目录创建后不可修改，换目录需删旧建新' : ''"
               />
               <datalist id="dir-suggestions-bot">
                 <option v-for="p in knownProjects" :key="p.path" :value="p.path"></option>
               </datalist>
-              <div v-if="isEdit && bot && bot.projectDir !== ''" class="field-hint">
-                目录已固定，更换需删除重建
+              <div v-if="isEdit && bot && bot.projectDir === ''" class="field-hint field-hint-warn">
+                ⚠ 此机器人未设置服务目录，可在此补填
               </div>
-              <div v-else-if="isEdit" class="field-hint field-hint-warn">
-                ⚠ 此机器人未设置服务目录，可在此一次性补填，保存后即锁定
+              <div v-else-if="isEdit" class="field-hint">
+                切换服务目录会解除该机器人当前绑定（在途任务仍在原会话完成）。
               </div>
               <div v-else class="field-hint">
-                可从已知项目选择，或手动输入任意目录路径。创建后固定，此机器人只能绑定该目录下的会话。
+                可从已知项目选择，或手动输入任意目录路径。此机器人只能绑定该目录下的会话。
               </div>
             </div>
 
@@ -93,12 +91,25 @@
         </div>
       </div>
     </transition>
+
+    <!-- Switch-directory confirmation: shown when the user changes the
+         projectDir of a bot that currently holds an active binding. -->
+    <ConfirmDialog
+      :show="switchConfirm.show"
+      title="切换服务目录"
+      :message="switchConfirm.message"
+      type="warning"
+      :z-index="10012"
+      @confirm="confirmSwitch"
+      @cancel="cancelSwitch"
+    />
   </Teleport>
 </template>
 
 <script setup>
 import { ref, computed, watch } from 'vue';
 import { useProjectsStore } from '../../stores/projects';
+import ConfirmDialog from '../common/ConfirmDialog.vue';
 
 const props = defineProps({
   show: { type: Boolean, default: false },
@@ -180,6 +191,9 @@ const canSubmit = computed(() => {
   if (!isEdit.value && !form.value.appId) return false;
   if (!isEdit.value && !form.value.appSecret) return false;
   if (!isEdit.value && !form.value.projectDir) return false;
+  // Edit mode: projectDir is switchable but cannot be cleared — a bot must
+  // always point at a service dir once set (blocks non-empty → empty).
+  if (isEdit.value && !form.value.projectDir) return false;
   if (appIdError.value) return false;
   return true;
 });
@@ -191,9 +205,7 @@ function parseAllowedUsers(text) {
     .filter(Boolean);
 }
 
-function submit() {
-  if (!canSubmit.value || submitting.value) return;
-  submitting.value = true;
+function buildPayload() {
   const payload = {
     name: form.value.name,
     allowedUsers: parseAllowedUsers(form.value.allowedUsersText)
@@ -202,15 +214,57 @@ function submit() {
     payload.botId = props.bot.id;
     // Only include fields the user actually wants to change.
     if (form.value.appSecret) payload.appSecret = form.value.appSecret;
-    // One-time projectDir backfill when currently empty.
-    if (props.bot.projectDir === '' && form.value.projectDir) {
-      payload.projectDir = form.value.projectDir;
-    }
+    // projectDir is switchable — always carry the edited value so the backend
+    // can apply the switch (with processing/auto-unbind guards).
+    payload.projectDir = form.value.projectDir;
   } else {
     payload.appId = form.value.appId;
     payload.appSecret = form.value.appSecret;
     payload.projectDir = form.value.projectDir;
   }
+  return payload;
+}
+
+// Switching the service directory while the bot holds an active binding drops
+// that binding (design §3.3). Confirm before submitting so the user knows the
+// previously bound conversation loses its remote entry.
+const switchConfirm = ref({ show: false, message: '', payload: null });
+
+function isDirSwitchWithBinding() {
+  return (
+    isEdit.value &&
+    props.bot &&
+    props.bot.binding &&
+    form.value.projectDir !== (props.bot.projectDir || '')
+  );
+}
+
+function submit() {
+  if (!canSubmit.value || submitting.value) return;
+  if (isDirSwitchWithBinding()) {
+    const sessionId = props.bot.binding?.sessionId || '?';
+    switchConfirm.value = {
+      show: true,
+      message: `切换服务目录将解除当前绑定（会话 ${sessionId}），在途任务仍在原会话完成。是否继续？`,
+      payload: buildPayload()
+    };
+    return;
+  }
+  doSubmit(buildPayload());
+}
+
+function confirmSwitch() {
+  const payload = switchConfirm.value.payload;
+  switchConfirm.value = { show: false, message: '', payload: null };
+  if (payload) doSubmit(payload);
+}
+
+function cancelSwitch() {
+  switchConfirm.value = { show: false, message: '', payload: null };
+}
+
+function doSubmit(payload) {
+  submitting.value = true;
   emit('submit', { payload, done: () => { submitting.value = false; } });
 }
 

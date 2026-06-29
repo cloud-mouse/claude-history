@@ -230,7 +230,11 @@ async function onEditSubmit({ payload, done }) {
       }
     }
   } else {
-    showToast(result.error || '保存失败', false);
+    if (isEdit && result.code === 'BOT_PROCESSING') {
+      showToast('机器人正在处理消息，请稍后再切换服务目录', false);
+    } else {
+      showToast(result.error || '保存失败', false);
+    }
   }
 }
 

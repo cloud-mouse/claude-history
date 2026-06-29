@@ -104,8 +104,32 @@ class BotManager {
   }
 
   updateBot(botId, fields) {
+    // Switch guards when projectDir changes (design 06-29-feishu-bot-switch-dir).
+    // Unbind must happen BEFORE writing project_dir so the binding row doesn't
+    // keep a stale project_dir while bot.project_dir moves to the new value.
+    if (Object.prototype.hasOwnProperty.call(fields, 'projectDir')) {
+      const current = this.store.getBot(botId);
+      const oldDir = (current && current.project_dir) || '';
+      const newDir = String(fields.projectDir || '').trim();
+      if (oldDir !== newDir) {
+        const rt = this.getRuntime(botId);
+        // C1: refuse switch while a message is being processed — in-flight spawn
+        // cwd must not move underneath the running generation.
+        if (rt && rt._processing) {
+          const err = new Error('机器人正在处理消息，请稍后再切换服务目录');
+          err.code = 'BOT_PROCESSING';
+          throw err;
+        }
+        // C3: a switch drops the bot's active binding (no snapshot kept).
+        const binding = this.store.getActiveBindingByBot(botId);
+        if (binding) {
+          this.store.clearBindingByBot(botId);
+          if (rt) rt._unwatch();
+        }
+      }
+    }
     const bot = this.store.updateBot(botId, fields);
-    const rt = this.runtimes.get(botId);
+    const rt = this.getRuntime(botId);
     if (rt) rt.setBot(bot);
     this.broadcastStatus();
     return this._sanitizeBot(bot);
