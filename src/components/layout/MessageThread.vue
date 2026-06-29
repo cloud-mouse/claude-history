@@ -16,9 +16,9 @@
             <span class="message-count">{{ messageCount }} 条消息</span>
           </div>
           <span class="conversation-date">{{ conversationTime }}</span>
-          <span v-if="remoteSession" :class="['remote-badge', feishuStore.processing ? 'active' : 'idle']">
-            <span :class="['status-dot-inline', feishuStore.processing ? 'green' : 'yellow']"></span>
-            飞书 {{ feishuStore.processing ? '活跃' : '空闲' }}
+          <span v-if="remoteBot" class="remote-badge" :class="remoteBot.processing ? 'active' : 'idle'">
+            <span :class="['status-dot-inline', remoteBot.processing ? 'green' : 'yellow']"></span>
+            {{ remoteBot.name }} {{ remoteBot.processing ? '活跃' : '空闲' }}
           </span>
         </div>
         <div class="thread-header-left">
@@ -37,7 +37,7 @@
               :blocks="message.blocks || [message]"
               :role="message.role === 'tool_result' ? 'assistant' : message.role"
               :timestamp="message.timestamp"
-              :source="remoteSession && message.role === 'user' ? 'feishu' : null"
+              :source="remoteBot && message.role === 'user' ? 'feishu' : null"
               :message-id="message.id"
               :ref="el => setBubbleRef(index, el)"
             />
@@ -151,11 +151,14 @@ const messageCount = computed(() => {
   ).length;
 });
 
-// The active conversation is the bound one when the Feishu binding points at it.
-// Drives the compact "飞书 活跃/空闲" capsule (only shown for bound conversations).
-const remoteSession = computed(() => {
+// The active conversation's bound bot (multi-bot model): look up which bot has
+// this jsonl bound. Drives the compact "<bot> 活跃/空闲" capsule (only shown for
+// bound conversations). Includes the bot's runtime processing flag.
+const remoteBot = computed(() => {
   if (!props.conversation?.filePath) return null;
-  return feishuStore.binding?.jsonlPath === props.conversation.filePath ? feishuStore.binding : null;
+  const bot = feishuStore.bots.find((b) => b.binding?.jsonlPath === props.conversation.filePath);
+  if (!bot) return null;
+  return { id: bot.id, name: bot.name, processing: !!bot.processing };
 });
 
 function setBubbleRef(index, el) {

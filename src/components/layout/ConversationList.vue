@@ -17,8 +17,15 @@
           @click="onSelect(conv)"
         >
           <div class="conv-main">
-            <span v-if="feishuStore.isBound(conv.filePath)" class="binding-dot" title="已绑定飞书"></span>
+            <span
+              v-if="boundBotName(conv.filePath)"
+              class="binding-dot"
+              :title="`已被机器人「${boundBotName(conv.filePath)}」绑定`"
+            ></span>
             <span class="conv-title">{{ cleanTitle(titleMap[conv.filePath] || conv.title) || '未命名' }}</span>
+            <span v-if="boundBotName(conv.filePath)" class="feishu-bot-tag" :title="`绑定到：${boundBotName(conv.filePath)}`">
+              {{ boundBotName(conv.filePath) }}
+            </span>
             <span v-if="conv.fileSize > 50 * 1024 * 1024" class="large-file-badge">大文件</span>
           </div>
           <div class="conv-footer">
@@ -42,6 +49,35 @@
       @cancel="showDeleteConfirm = false"
     />
 
+    <!-- Session-side bind picker (multi-bot) -->
+    <BindBotPicker
+      :show="bindPicker.show"
+      :jsonl-path="bindPicker.jsonlPath"
+      :project-dir="bindPicker.projectDir"
+      :session-label="bindPicker.sessionLabel"
+      @close="closeBindPicker"
+      @bind="onPickerBind"
+      @rebind-needed="onRebindNeeded"
+    />
+
+    <!-- Rebind confirmation -->
+    <RebindConfirmModal
+      :show="rebindModal.show"
+      :info="rebindModal.info"
+      @close="closeRebind"
+      @confirm="onRebindConfirm"
+    />
+
+    <!-- Unbind confirmation (which bot to unbind, if multiple bind the same session is impossible, but be safe) -->
+    <ConfirmDialog
+      :show="unbindConfirm.show"
+      title="解除绑定"
+      :message="unbindConfirm.message"
+      type="warning"
+      @confirm="doUnbind"
+      @cancel="cancelUnbind"
+    />
+
     <transition name="toast">
       <div v-if="toast" class="conv-toast" :class="toast.success ? 'success' : 'error'">
         {{ toast.message }}
@@ -59,6 +95,8 @@ import { useConversationsStore } from '../../stores/conversations.js';
 import SearchBar from '../common/SearchBar.vue';
 import ConfirmDialog from '../common/ConfirmDialog.vue';
 import DropdownMenu from '../common/DropdownMenu.vue';
+import BindBotPicker from '../feishu/BindBotPicker.vue';
+import RebindConfirmModal from '../feishu/RebindConfirmModal.vue';
 import { useFeishuStore } from '../../stores/feishu';
 
 const feishuStore = useFeishuStore();
@@ -87,17 +125,28 @@ function onSelect(conv) {
   emit('select', conv);
 }
 
+// --- Feishu binding helpers (multi-bot: a session can be bound by one bot) ---
+
+/**
+ * @param {string} jsonlPath
+ * @returns {string} bot name when bound, '' otherwise.
+ */
+function boundBotName(jsonlPath) {
+  return feishuStore.boundBotFor(jsonlPath)?.name || '';
+}
+
 // --- Per-conversation context menu (4 actions) ---
 
 function menuItems(conv) {
-  const bound = feishuStore.isBound(conv.filePath);
+  const bound = !!boundBotName(conv.filePath);
   return [
     {
       key: 'bind',
-      label: bound ? '解除绑定' : '绑定到飞书',
-      disabled: !feishuStore.connected,
-      disabledHint: '请先在设置中连接飞书桥接'
+      label: bound ? '更换绑定机器人' : '绑定到飞书',
+      disabled: feishuStore.bots.length === 0,
+      disabledHint: '请先在设置中添加飞书机器人'
     },
+    { key: 'unbind', label: '解除飞书绑定', disabled: !bound, disabledHint: '当前会话未绑定' },
     { key: 'resume', label: '恢复会话' },
     { key: 'copy', label: '复制恢复命令' },
     { key: 'delete', label: '删除会话', danger: true }
@@ -106,14 +155,15 @@ function menuItems(conv) {
 
 async function onMenuSelect(conv, key) {
   if (key === 'bind') {
-    // Singleton semantics (ADR-0001): binding replaces the previous binding.
-    // Toggle directly — no confirmation — with a toast for feedback.
-    if (feishuStore.isBound(conv.filePath)) {
-      await feishuStore.unbind();
-      showToast('已解除绑定', true);
-    } else {
-      const r = await feishuStore.bindSession(conv.filePath);
-      showToast(r.success ? (r.message || '已绑定到飞书') : (r.error || '绑定失败'), r.success);
+    openBindPicker(conv);
+  } else if (key === 'unbind') {
+    const bot = feishuStore.boundBotFor(conv.filePath);
+    if (bot) {
+      unbindConfirm.value = {
+        show: true,
+        botId: bot.id,
+        message: `确定要解除机器人「${bot.name}」与此会话的绑定吗？`
+      };
     }
   } else if (key === 'resume') {
     window.electronAPI.resumeConversation(conv.filePath, resolveProjectDir(conv));
@@ -123,6 +173,63 @@ async function onMenuSelect(conv, key) {
   } else if (key === 'delete') {
     confirmDelete(conv);
   }
+}
+
+// --- Bind picker ---
+const bindPicker = ref({ show: false, jsonlPath: null, projectDir: null, sessionLabel: '' });
+
+function openBindPicker(conv) {
+  const projectDir = resolveProjectDir(conv);
+  if (!projectDir) {
+    showToast('无法解析会话的工作目录，请先在设置中绑定', false);
+    return;
+  }
+  bindPicker.value = {
+    show: true,
+    jsonlPath: conv.filePath,
+    projectDir,
+    sessionLabel: cleanTitle(titleMap[conv.filePath] || conv.title) || ''
+  };
+}
+function closeBindPicker() {
+  bindPicker.value = { show: false, jsonlPath: null, projectDir: null, sessionLabel: '' };
+}
+function onPickerBind() {
+  showToast('已绑定到机器人', true);
+  closeBindPicker();
+}
+function onRebindNeeded(info) {
+  closeBindPicker();
+  rebindModal.value = { show: true, info };
+}
+
+// --- Rebind confirm ---
+const rebindModal = ref({ show: false, info: {} });
+function closeRebind() {
+  rebindModal.value = { show: false, info: {} };
+}
+async function onRebindConfirm({ botId, jsonlPath, done }) {
+  const result = await feishuStore.rebindSessionToBot({ botId, jsonlPath });
+  done && done();
+  if (result.success) {
+    showToast('已换绑', true);
+    closeRebind();
+  } else {
+    showToast(result.error || '换绑失败', false);
+  }
+}
+
+// --- Unbind confirm ---
+const unbindConfirm = ref({ show: false, botId: null, message: '' });
+function cancelUnbind() {
+  unbindConfirm.value = { show: false, botId: null, message: '' };
+}
+async function doUnbind() {
+  const botId = unbindConfirm.value.botId;
+  if (botId == null) return;
+  const result = await feishuStore.unbindBot(botId);
+  cancelUnbind();
+  showToast(result.success ? '已解除绑定' : (result.error || '解绑失败'), result.success);
 }
 
 function showToast(message, success) {
@@ -232,6 +339,24 @@ function formatDate(timestamp) {
   flex-shrink: 0;
   box-shadow: 0 0 6px var(--success-bg);
   animation: pulse-dot 2s ease-in-out infinite;
+}
+
+.feishu-bot-tag {
+  font-size: var(--font-size-xs);
+  color: var(--success);
+  background: var(--success-bg);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-item.active .feishu-bot-tag {
+  background: var(--surface-hover);
+  opacity: 0.85;
 }
 
 @keyframes pulse-dot {
