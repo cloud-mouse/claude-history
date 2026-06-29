@@ -253,8 +253,8 @@ app.whenReady().then(() => {
   const store = getStore();
   store.setSafeStorage(safeStorage);
 
-  // Migrate to multi-bot schema (safeStorage is now injected, so cc-connect
-  // rescued secrets encrypt), then boot the shared hooks server + enabled bots.
+  // Migrate to multi-bot schema (safeStorage is now injected, so secrets
+  // encrypt), then boot the shared hooks server + enabled bots.
   try {
     store.migrateToMultiBot();
     botManager.loadAll().catch(err => {

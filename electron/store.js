@@ -1,9 +1,6 @@
 'use strict';
 
 const Database = require('better-sqlite3');
-const path = require('path');
-const os = require('os');
-const fs = require('fs');
 
 class Store {
   constructor(dbPath) {
@@ -566,12 +563,11 @@ class Store {
   /**
    * One-time migration to the multi-bot schema. Idempotent via the
    * app_settings.feishu_multi_bot_migrated flag. Run after safeStorage is
-   * injected (e.g. from BotManager.loadAll) so credentials rescued from
-   * cc-connect are encrypted.
+   * injected (e.g. from BotManager.loadAll) so credentials are encrypted.
    *
    * Single transaction: schema upgrade (legacy feishu_bindings → renamed
-   * backup + new bot_id-keyed table) → build bot 1 from feishu_config (with
-   * cc-connect credential rescue) → move at most one legacy binding → flag.
+   * backup + new bot_id-keyed table) → build bot 1 from feishu_config → move
+   * at most one legacy binding → flag.
    */
   migrateToMultiBot() {
     if (this.getAppSetting('feishu_multi_bot_migrated') === '1') return;
@@ -599,12 +595,8 @@ class Store {
       `);
       this.db.exec('CREATE INDEX IF NOT EXISTS idx_feishu_bindings_jsonl ON feishu_bindings(jsonl_path)');
 
-      // 3. Source credentials: feishu_config first, then cc-connect rescue.
-      let config = this.db.prepare('SELECT * FROM feishu_config WHERE id = 1').get();
-      if (!config || !config.app_id) {
-        this._rescueCcConnectCredentials();
-        config = this.db.prepare('SELECT * FROM feishu_config WHERE id = 1').get();
-      }
+      // 3. Source credentials: feishu_config.
+      const config = this.db.prepare('SELECT * FROM feishu_config WHERE id = 1').get();
 
       // 4. Build bot 1 only when a valid app_id exists (design §12).
       if (config && config.app_id) {
@@ -674,36 +666,6 @@ class Store {
     });
 
     tx();
-  }
-
-  /**
-   * Rescue Feishu credentials from the legacy cc-connect config (design §12).
-   * Only writes when feishu_config has no app_id. Mirrors the old
-   * FeishuBridge.migrateFromCcConnect (bridge.js:705), relocated into the store
-   * so the migration owns credential rescue end-to-end.
-   */
-  _rescueCcConnectCredentials() {
-    let tomlPath;
-    try {
-      tomlPath = path.join(os.homedir(), '.cc-connect', 'config.toml');
-    } catch { return; }
-    if (!fs.existsSync(tomlPath)) return;
-    try {
-      const smolTOML = require('smol-toml');
-      const data = smolTOML.parse(fs.readFileSync(tomlPath, 'utf-8'));
-      const projects = data.projects;
-      if (!Array.isArray(projects)) return;
-      for (const project of projects) {
-        const platforms = project.platforms;
-        if (!Array.isArray(platforms)) continue;
-        for (const platform of platforms) {
-          if (platform.type === 'feishu' && platform.options) {
-            const { app_id, app_secret } = platform.options;
-            if (app_id && app_secret) { this.saveFeishuConfig(app_id, app_secret); return; }
-          }
-        }
-      }
-    } catch (err) { console.warn('[store] cc-connect rescue failed:', err.message); }
   }
 
   // ── Feishu bots (multi-bot, design §4.1) ──────────────────────
