@@ -45,7 +45,7 @@
           <div class="project-info">
             <span class="project-name">{{ getDisplayName(project) }}</span>
             <div class="project-meta">
-              <span class="project-path">{{ getShortPath(project.path) }}</span>
+              <span class="project-path" :title="getProjectCwd(project) || project.path">{{ getShortPath(getProjectCwd(project) || project.path) }}</span>
               <span v-if="getLatestTime(project)" class="project-time">{{ formatRelativeTime(getLatestTime(project)) }}</span>
             </div>
           </div>
@@ -121,7 +121,24 @@ function handleDelete() {
   pendingDelete.value = null;
 }
 
+// Real working directory from the conversations' recorded cwd. The project's
+// own `path` is only the jsonl folder (~/.claude/projects/<slug>) and `name`
+// is the encoded slug — neither is correct to show as the project's directory.
+function getProjectCwd(project) {
+  const convs = project.conversations || [];
+  for (const c of convs) {
+    if (c.projectDir) return c.projectDir;
+  }
+  return null;
+}
+
 function getDisplayName(project) {
+  const cwd = getProjectCwd(project);
+  if (cwd) {
+    const parts = String(cwd).replace(/\/+$/, '').split('/');
+    return parts[parts.length - 1] || cwd;
+  }
+  // Fallback to the slug's last segment(s) only when no cwd is recorded yet.
   if (!project.name) {
     return project.path?.split('/').pop() || '未命名项目';
   }
