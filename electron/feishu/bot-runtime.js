@@ -439,9 +439,16 @@ class BotRuntime {
       return false;
     }
 
-    // /switch confirmation (design §9, decision 1)
+    // /switch confirmation (design §9, decision 1). Re-route by value.botId so
+    // the switch resolves even if Feishu does NOT route card events per-app —
+    // the card's callback value carries botId as a double-safety, mirroring the
+    // hook_* path (design §8.2/§8.3).
     if (value.action === 'switch_confirm' || value.action === 'switch_cancel') {
-      return this._resolveSwitch(value, messageId);
+      const targetRuntime = (value.botId != null && value.botId !== '')
+        ? this.botManager.getRuntime(Number(value.botId))
+        : this;
+      if (!targetRuntime) return false;
+      return targetRuntime._resolveSwitch(value, messageId);
     }
 
     if (value.action === 'terminate') {

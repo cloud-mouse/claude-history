@@ -896,52 +896,6 @@ class Store {
     return this.db.prepare('SELECT * FROM feishu_bindings WHERE jsonl_path = ? AND active = 1').get(jsonlPath) || null;
   }
 
-  /**
-   * Legacy compat wrapper (design §4.2): chat_id no longer participates in
-   * binding lookup. Returns the global active binding so BotRuntime can be split
-   * out without a dead intermediate state. Removed after stages 3 (routing) and
-   * 4 (commands) stop referencing it.
-   */
-  getBindingByChatId(_chatId) {
-    return this.getActiveBinding();
-  }
-
-  getActiveBinding() {
-    return this.db.prepare('SELECT * FROM feishu_bindings WHERE active = 1').get() || null;
-  }
-
-  deactivateAllBindings() {
-    this.db.prepare('UPDATE feishu_bindings SET active = 0').run();
-  }
-
-  /**
-   * @deprecated Bot-level bindings replace chat-keyed writes (design §4.2/§9).
-   * Use updateBindingByBot. Retained until commands.js is migrated (stage 4);
-   * the new schema has no chat_id column, so this only runs in dead code paths.
-   */
-  updateBinding(chatId, fields) {
-    const allowed = ['session_id', 'jsonl_path', 'project_dir', 'chat_type'];
-    const sets = [];
-    const values = [];
-
-    for (const [key, value] of Object.entries(fields)) {
-      if (allowed.includes(key)) {
-        sets.push(`${key} = ?`);
-        values.push(value);
-      }
-    }
-
-    if (sets.length === 0) return;
-
-    const now = Date.now();
-    sets.push('updated_at = ?');
-    values.push(now);
-    values.push(chatId);
-
-    this.db.prepare(
-      `UPDATE feishu_bindings SET ${sets.join(', ')} WHERE chat_id = ? AND active = 1`
-    ).run(...values);
-  }
 }
 
 module.exports = { Store };

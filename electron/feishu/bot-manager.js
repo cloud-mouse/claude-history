@@ -140,6 +140,15 @@ class BotManager {
   bindSessionToBot(botId, jsonlPath) {
     const bot = this.store.getBot(botId);
     if (!bot) throw new Error('机器人不存在');
+    if (!bot.project_dir) throw new Error('机器人未设置服务目录，请先补全');
+    // Defense-in-depth: the frontend only lists same-dir sessions, but the IPC
+    // layer must not trust the renderer. Reject cross-dir bindings — a session's
+    // resolved cwd must match the bot's project_dir (design §10.1 / prd §3).
+    const { resolveCwd } = require('./binding');
+    const sessionCwd = resolveCwd(jsonlPath);
+    if (sessionCwd && path.resolve(sessionCwd) !== path.resolve(bot.project_dir)) {
+      throw new Error('会话不属于该机器人的服务目录（跨目录绑定已被禁止）');
+    }
     const sessionId = path.basename(jsonlPath, '.jsonl');
     const binding = this.store.upsertBindingByBot(botId, { jsonlPath, sessionId, projectDir: bot.project_dir });
     const rt = this.runtimes.get(botId);
@@ -187,6 +196,10 @@ class BotManager {
           name: bot.name,
           appId: bot.app_id,
           projectDir: bot.project_dir,
+          // Parsed allowlist (array of open_id; empty = allow everyone). Exposed so
+          // the edit form can prefill the current whitelist — otherwise saving any
+          // edit would silently wipe it. Not secret (App ID isn't either).
+          allowedUsers: (bot.allowed_users || '').split(',').map((s) => s.trim()).filter(Boolean),
           enabled: !!bot.enabled,
           hasSecret: !!(bot.app_secret && bot.app_secret !== ''),
           needsProjectDir: !bot.project_dir,
@@ -216,11 +229,24 @@ class BotManager {
     }
   }
 
-  /** Strip the ciphertext secret before returning a bot to the renderer. */
+  /** Strip the ciphertext secret + normalize field names to the status shape. */
   _sanitizeBot(bot) {
     if (!bot) return bot;
-    const { app_secret, ...rest } = bot;
-    return { ...rest, hasSecret: !!(app_secret && app_secret !== '') };
+    const { app_secret, allowed_users, project_dir, app_id, enabled, ...rest } = bot;
+    // Runtime fields default to "offline/idle" — the next broadcastStatus() will
+    // refresh them with live values once the runtime actually (dis)connects.
+    return {
+      ...rest,
+      appId: app_id,
+      projectDir: project_dir,
+      allowedUsers: (allowed_users || '').split(',').map((s) => s.trim()).filter(Boolean),
+      enabled: !!enabled,
+      hasSecret: !!(app_secret && app_secret !== ''),
+      needsProjectDir: !project_dir,
+      online: false,
+      processing: false,
+      binding: null
+    };
   }
 }
 

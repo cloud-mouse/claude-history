@@ -146,7 +146,11 @@ function syncFromBot() {
       appId: props.bot.appId || '',
       appSecret: '', // never prefill secret; empty = no change in edit mode
       projectDir: props.bot.projectDir || '',
-      allowedUsersText: ''
+      // Prefill the current whitelist so saving an unrelated edit doesn't wipe it.
+      // (allowedUsers comes from the aggregated status payload as an array.)
+      allowedUsersText: Array.isArray(props.bot.allowedUsers)
+        ? props.bot.allowedUsers.join(', ')
+        : ''
     };
   } else {
     form.value = emptyForm();
