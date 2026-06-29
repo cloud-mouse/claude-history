@@ -4,6 +4,7 @@ out/
 *.db
 .DS_Store
 design/
+prototypes/*
 
 # Vitepress cache
 docs/.vitepress/cache/*
