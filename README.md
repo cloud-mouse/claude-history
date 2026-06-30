@@ -1,6 +1,6 @@
 # Claude History
 
-一款用于浏览和管理本地 Claude Code 对话历史的桌面应用，同时支持通过飞书机器人远程交互。
+一款用于浏览和管理本地 Claude Code 对话历史的桌面应用，同时支持通过多个飞书机器人远程交互。
 
 ## 更新日志
 
@@ -10,13 +10,14 @@
 
 - **三栏可折叠布局**：项目列表 → 对话列表 → 消息详情，左右面板支持一键收起/展开，支持拖拽调整面板宽度
 - **优雅的对话展示**：支持 Markdown 渲染、代码高亮、表格样式、图片点击放大预览
+- **全文搜索**：跨对话内容的关键词检索，快速定位
 - **主题切换**：支持简约白 / 深邃黑 / 暖色调 / Monokai 四种主题
+- **毛玻璃效果**：原生毛玻璃（macOS vibrancy / Windows acrylic），可在设置中开关，Linux 自动隐藏
 - **会话恢复**：一键在终端中恢复历史会话，继续之前的对话
 - **专用工具展示组件**：Agent 子代理、AskUserQuestion 交互问题、TodoWrite 任务清单、Edit/Write 文件 diff 对比、Read 文件路径、Bash 命令、Thinking 思维过程、Glob/Grep 搜索等
 - **智能标题提取**：自动从对话内容中提取并生成标题
-- **对话搜索**：在对话列表中按关键词快速过滤
 - **项目排序**：支持按时间或对话数量排序
-- **飞书桥连**：通过飞书机器人远程与 Claude Code 对话，支持 20+ 条斜杠命令、会话绑定、模型切换、权限管控、工作目录切换等
+- **飞书桥连**：通过**多个飞书机器人**分别远程驱动不同项目的 Claude Code，支持 15 条斜杠命令、per-bot 会话绑定、模型切换、权限管控、服务目录切换等
 - **中文界面**：完整的本地化支持
 - **安全删除**：支持删除对话和项目（同时移除磁盘文件和数据库记录）
 - **跨平台构建**：支持 macOS（DMG）、Windows（NSIS 安装包 + 便携版）、Linux（AppImage），通过 GitHub Releases 自动发布
@@ -117,32 +118,36 @@ pnpm electron:build
 ```
 claude-history/
 ├── electron/                  # Electron 主进程
-│   ├── index.js                 # 主进程入口，创建窗口
+│   ├── index.js                 # 主进程入口，创建窗口、初始化飞书多机器人
 │   ├── preload.js               # 预加载脚本，暴露 IPC 接口
 │   ├── ipc-handlers.js          # 核心业务 IPC 通信处理器
-│   ├── feishu-ipc.js            # 飞书桥连 IPC 处理器
+│   ├── feishu-ipc.js            # 飞书机器人 IPC 处理器（增删改查、绑定）
 │   ├── feishu-hook-script.js    # Claude Code PreToolUse hook 脚本
-│   ├── feishu/                  # 飞书桥连模块
-│   │   ├── index.js               # 模块入口
-│   │   ├── bridge.js              # 核心桥连（WebSocket、消息处理）
-│   │   ├── commands.js            # 20+ 条斜杠命令
-│   │   ├── cards.js               # 飞书卡片构建
-│   │   ├── permissions.js         # 权限管理（4 种模式）
-│   │   ├── hooks-handler.js       # Hooks HTTP 服务器
-│   │   ├── claude-spawn.js        # Claude CLI 调用
-│   │   └── binding.js             # 会话绑定与文件监听
-│   ├── store.js                 # SQLite 数据库操作（含飞书配置表、凭证加密）
+│   ├── store.js                 # SQLite 数据库（feishu_bots / feishu_bindings、凭证加密）
 │   ├── file-scanner.js          # 扫描 ~/.claude/projects 目录
 │   ├── jsonl-parser.js          # 流式 JSONL 解析器
 │   ├── message-parser.js        # 消息解析与结构化
 │   ├── markdown.js              # Markdown 渲染（主进程端）
-│   └── title-extractor.js       # 标题提取工具
+│   ├── title-extractor.js       # 标题提取工具
+│   ├── project-opener.js        # 以外部工具（Cursor/VS Code/终端）打开项目
+│   ├── update-checker.js        # 免签名的启动更新检查
+│   ├── backfill.js              # 历史数据回填/重建索引
+│   └── feishu/                  # 飞书桥连模块
+│       ├── index.js               # 模块入口
+│       ├── bot-manager.js          # 多机器人管理器（生命周期、状态广播、切换守护）
+│       ├── bot-runtime.js          # 单机器人运行时（WebSocket、消息处理、串行控制）
+│       ├── commands.js             # 15 条斜杠命令
+│       ├── cards.js                # 飞书卡片构建
+│       ├── permissions.js          # 权限管理（4 种模式）
+│       ├── hooks-handler.js        # Hooks HTTP 服务器（端口 19876+），按 botId 路由
+│       ├── claude-spawn.js         # Claude CLI 调用
+│       └── binding.js              # bot-level 绑定与文件监听
 ├── src/                       # Vue 渲染进程
 │   ├── App.vue                  # 根组件，三栏布局 + 飞书集成
 │   ├── main.js                  # 渲染进程入口
 │   ├── components/
 │   │   ├── layout/              # 页面级布局组件
-│   │   │   ├── ProjectList.vue        # 左栏 - 项目列表（排序、刷新、删除）
+│   │   │   ├── ProjectList.vue        # 左栏 - 项目列表（排序、刷新、删除、外部打开）
 │   │   │   ├── ConversationList.vue   # 中栏 - 对话列表（搜索、飞书状态圆点）
 │   │   │   └── MessageThread.vue      # 右栏 - 消息详情（恢复会话、飞书绑定）
 │   │   ├── chat/                # 消息内容渲染
@@ -165,18 +170,31 @@ claude-history/
 │   │   │   ├── TaskOutputBlock.vue    # 任务输出
 │   │   │   ├── TodoWriteBlock.vue     # 任务清单
 │   │   │   └── AskUserQuestionBlock.vue # 交互问题
-│   │   ├── feishu/              # 飞书桥连组件
-│   │   │   └── SettingsModal.vue      # 飞书设置弹窗
+│   │   ├── feishu/              # 飞书机器人管理组件
+│   │   │   ├── BotEditModal.vue       # 机器人创建/编辑弹窗
+│   │   │   ├── BotSessionPicker.vue   # 从机器人侧选择会话
+│   │   │   ├── BindBotPicker.vue      # 从会话侧选择机器人
+│   │   │   └── RebindConfirmModal.vue # 换绑确认弹窗
+│   │   ├── settings/            # 设置中心各标签页
+│   │   │   ├── SettingsModal.vue      # 设置弹窗容器（tab 切换）
+│   │   │   ├── FeishuSettingsTab.vue  # 飞书 - 多机器人管理
+│   │   │   ├── AppearanceSettingsTab.vue # 外观 - 主题/毛玻璃
+│   │   │   ├── StatsSettingsTab.vue   # 使用统计
+│   │   │   └── AboutSettingsTab.vue   # 关于与更新
 │   │   └── common/              # 通用 UI 组件
 │   │       ├── SearchBar.vue          # 搜索输入框
 │   │       ├── SkeletonLoader.vue     # 骨架屏加载
-│   │       ├── ConfirmDialog.vue      # 确认弹窗
+│   │       ├── ConfirmDialog.vue      # 确认弹窗（支持嵌套层级）
 │   │       └── ThemeSelector.vue      # 主题选择器
 │   ├── stores/                  # Pinia 状态管理
 │   │   ├── projects.js             # 项目数据
 │   │   ├── conversations.js        # 对话数据与 LRU 缓存
+│   │   ├── search.js               # 全文搜索
 │   │   ├── theme.js                # 主题状态
-│   │   └── feishu.js               # 飞书桥连状态
+│   │   ├── appearance.js           # 外观（毛玻璃等）
+│   │   ├── feishu.js               # 飞书机器人列表与状态
+│   │   ├── stats.js                # 使用统计
+│   │   ├── update.js / updater.js  # 更新检查
 │   ├── styles/                  # 全局样式
 │   │   ├── variables.css           # CSS 变量定义（四主题）
 │   │   └── global.css              # 全局基础样式
@@ -192,6 +210,8 @@ claude-history/
 ├── docs/                      # VitePress 文档站点
 │   ├── index.md                    # 落地页
 │   ├── feishu-bridge.md            # 飞书桥连使用文档
+│   ├── operations.md               # 操作指南
+│   ├── adr/                        # 架构决策记录
 │   └── .vitepress/config.js        # 文档站点配置
 ├── .github/workflows/         # CI/CD 工作流
 │   ├── deploy.yml                  # GitHub Pages 文档部署
@@ -208,24 +228,25 @@ claude-history/
 
 ## 飞书桥连
 
-通过飞书机器人远程与 Claude Code 交互，无需在电脑前也能继续对话。详细配置请参考[飞书桥连文档](docs/feishu-bridge.md)。
+通过飞书机器人远程与 Claude Code 交互，无需在电脑前也能继续对话。支持**多个机器人并存**——每个机器人是一个独立的飞书自建应用，绑定到各自的服务工作目录，并行运行。详细配置请参考[飞书桥连文档](docs/feishu-bridge.md)。
 
 ### 主要功能
 
+- **多机器人并存**：为不同项目各配一个飞书机器人（独立 App ID），并行运行、互不干扰
 - **双向消息流**：飞书消息 → Claude Code CLI → 飞书卡片回复，处理中显示敲键盘表情
-- **会话绑定**：将飞书聊天绑定到指定的 Claude Code 会话
-- **20+ 条命令**：`/help`、`/status`、`/new`、`/switch`、`/model`、`/cd`、`/permission`、`/allow`、`/disallow` 等，支持中文别名
+- **per-bot 会话绑定**：每个机器人绑定一个会话，支持双向发起与换绑
+- **15 条斜杠命令**：`/help`、`/status`、`/new`、`/switch`、`/model`、`/permission`、`/allow`、`/disallow` 等，支持中文别名
 - **权限管控**：通过飞书卡片确认敏感操作（Bash、Write、Edit），支持四种权限模式
 - **模型切换**：远程切换 Claude 模型（sonnet / opus / haiku）
-- **工作目录切换**：远程切换工作目录
+- **服务目录切换**：在桌面端切换机器人的工作目录
 - **实时状态**：对话列表中显示飞书会话状态圆点
 - **凭证加密**：App Secret 使用 Electron safeStorage 加密存储
 
 ### 快速配置
 
-1. 在[飞书开放平台](https://open.feishu.cn/app)创建企业自建应用，记录 App ID 和 App Secret
-2. 在 claude-history 中点击 ⚙ 设置按钮，填写飞书凭证
-3. 开启桥连开关，即可在飞书中与 Claude Code 对话
+1. 在[飞书开放平台](https://open.feishu.cn/app)为每个机器人创建一个企业自建应用（**每个机器人一个独立 App ID**），记录 App ID 和 App Secret
+2. 在 claude-history 中点击 ⚙ 齿轮按钮 →「飞书」标签页 → 添加机器人，填入凭证与服务目录
+3. 机器人自动连接，绑定一个会话后即可在飞书中对话
 
 ## 使用技巧
 
@@ -233,14 +254,14 @@ claude-history/
 |------|------|
 | 面板折叠/展开 | 点击面板分隔线旁的箭头按钮 |
 | 调整面板宽度 | 拖拽面板之间的分隔线 |
-| 搜索对话 | 在对话列表顶部搜索框输入关键词 |
+| 全文搜索 | 在工具栏搜索框输入关键词 |
 | 项目排序 | 点击项目列表标题栏的排序按钮（按时间/对话数量） |
 | 恢复会话 | 点击「恢复会话」按钮，自动打开终端执行 `claude --resume` |
 | 复制恢复命令 | 点击命令区域一键复制 |
 | 展开/折叠全部 | 使用消息详情标题栏的「展开全部」/「收起全部」按钮 |
 | 图片预览 | 点击图片全屏放大，点击遮罩或按 Escape 关闭 |
-| 飞书绑定 | 在消息详情页点击「绑定到飞书」按钮 |
-| 开发者工具 | `Ctrl+K` (Windows) / `Cmd+K` (Mac) |
+| 飞书绑定 | 在消息详情页点击「绑定到飞书」按钮，或在设置 → 飞书中绑定 |
+| 开发者工具 | 「视图」菜单或平台默认快捷键（macOS `Cmd+Option+I`） |
 
 ## 常见问题
 
@@ -275,11 +296,12 @@ xattr -cr "/Applications/Claude History.app"
 xcode-select --install
 ```
 
-### 飞书桥连无法连接
+### 飞书机器人无法连接
 
-1. 确认飞书应用已创建并发布（需要 `im:message:receive_v1` 权限）
+1. 确认飞书应用已创建并发布（需要 `im:message` 等权限与 `im.message.receive_v1` 事件）
 2. 检查 App ID 和 App Secret 是否正确
-3. 查看终端输出的错误日志
+3. 确认 App ID 未被其他机器人或程序复用（共用 App ID 会导致 WebSocket 互相踢线）
+4. 查看终端输出的错误日志
 
 更多飞书相关问题请参考[飞书桥连文档](docs/feishu-bridge.md)。
 

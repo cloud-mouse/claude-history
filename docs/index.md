@@ -76,7 +76,7 @@ layout: page
     <div class="feature-card animate-on-scroll">
       <div class="feature-icon">🐦</div>
       <h3>飞书桥连</h3>
-      <p>通过飞书机器人远程与 Claude Code 对话，支持命令、模型切换、会话绑定</p>
+      <p>通过多个飞书机器人分别远程驱动不同项目，支持命令、模型切换、会话绑定</p>
     </div>
     <div class="feature-card animate-on-scroll">
       <div class="feature-icon">🔍</div>

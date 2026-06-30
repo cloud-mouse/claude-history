@@ -2,7 +2,7 @@
 
 A desktop app (Electron + Vue 3) for browsing and replaying Claude Code conversation history, with an optional Feishu (Lark) bridge that lets a remote chat drive one local session.
 
-## Language
+## 术语表 (Terminology)
 
 ### Feishu integration (multi-bot)
 

@@ -1,8 +1,11 @@
 ---
-status: accepted
+status: superseded
+superseded_by: ADR-0003
 ---
 
 # Feishu binding stays singleton
+
+> **Superseded by [ADR-0003](./0003-feishu-multi-bot.md)**：升级为多机器人架构后，绑定已改为 per-bot（每个机器人至多一个活跃绑定，多机器人并发），本 ADR 的「全局 singleton」决策不再适用。正文保留作为历史记录。
 
 ## Context
 
