@@ -69,6 +69,7 @@ const feishuStore = useFeishuStore();
 
 const bots = ref([]);
 const loading = ref(false);
+const picking = ref(false);
 
 const subtitle = computed(() => {
   if (props.sessionLabel) {
@@ -121,18 +122,23 @@ function tagLabel(b) {
 }
 
 async function onPick(b) {
-  if (b.disabled || !props.jsonlPath) return;
-  const result = await feishuStore.bindSessionToBot({ botId: b.id, jsonlPath: props.jsonlPath });
-  if (!result.success) return;
-  if (result.needsRebind) {
-    emit('rebind-needed', {
-      botId: b.id,
-      botName: b.name,
-      jsonlPath: props.jsonlPath,
-      currentBinding: result.currentBinding
-    });
-  } else {
-    emit('bind', { botId: b.id, jsonlPath: props.jsonlPath });
+  if (b.disabled || !props.jsonlPath || picking.value) return;
+  picking.value = true;
+  try {
+    const result = await feishuStore.bindSessionToBot({ botId: b.id, jsonlPath: props.jsonlPath });
+    if (!result.success) return;
+    if (result.needsRebind) {
+      emit('rebind-needed', {
+        botId: b.id,
+        botName: b.name,
+        jsonlPath: props.jsonlPath,
+        currentBinding: result.currentBinding
+      });
+    } else {
+      emit('bind', { botId: b.id, jsonlPath: props.jsonlPath });
+    }
+  } finally {
+    picking.value = false;
   }
 }
 

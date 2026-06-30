@@ -30,6 +30,8 @@
 </template>
 
 <script setup>
+import { computed } from 'vue';
+
 const props = defineProps({
   show: {
     type: Boolean,
@@ -60,7 +62,8 @@ const props = defineProps({
 
 // Only apply an inline z-index when a non-default value is passed, so the
 // existing 9999 callers keep relying on the stylesheet and nothing changes.
-const overlayStyle = props.zIndex !== 9999 ? { zIndex: String(props.zIndex) } : null;
+// Computed so a dynamically-changed zIndex prop stays reactive.
+const overlayStyle = computed(() => props.zIndex !== 9999 ? { zIndex: String(props.zIndex) } : null);
 
 const emit = defineEmits(['confirm', 'cancel']);
 

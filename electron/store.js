@@ -634,7 +634,7 @@ class Store {
             allowed_users = excluded.allowed_users,
             enabled = excluded.enabled,
             updated_at = excluded.updated_at
-        `).run('默认机器人', config.app_id, config.app_secret || '', projectDir, config.allowed_users || '', enabled, now, now);
+        `).run('默认机器人', config.app_id, (config.app_secret ? this._encryptSecret(this.decryptSecret(config.app_secret)) : ''), projectDir, config.allowed_users || '', enabled, now, now);
 
         // 5. Move at most one legacy binding to bot 1 (bot_id UNIQUE is row-level).
         if (legacyExists) {

@@ -171,7 +171,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onActivated } from 'vue';
+import { ref, computed, onMounted, onActivated, onUnmounted } from 'vue';
 import { useFeishuStore } from '../../stores/feishu';
 import { useProjectsStore } from '../../stores/projects';
 import BotEditModal from '../feishu/BotEditModal.vue';
@@ -353,6 +353,8 @@ onMounted(async () => {
 });
 // KeepAlive: refresh status when revisiting the tab.
 onActivated(() => { feishuStore.detect(); });
+// Clear any pending toast timer so it can't fire on an unmounted instance.
+onUnmounted(() => { if (toastTimer) clearTimeout(toastTimer); });
 </script>
 
 <style scoped>

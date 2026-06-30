@@ -77,6 +77,7 @@ const feishuStore = useFeishuStore();
 const sessions = ref([]);
 const loading = ref(false);
 const filter = ref('');
+const picking = ref(false);
 
 // Match by the real cwd stored on each conversation (projectDir), NOT by decoding
 // the slug name — a '-' inside a folder name like "my-space" makes slug decoding
@@ -135,19 +136,26 @@ function isBoundElsewhere(s) {
 }
 
 async function onPick(s) {
-  if (isBoundElsewhere(s) || !props.bot) return;
-  const result = await feishuStore.bindSessionToBot({ botId: props.bot.id, jsonlPath: s.filePath });
-  if (!result.success) return;
-  if (result.needsRebind) {
-    emit('rebind-needed', {
-      botId: props.bot.id,
-      botName: props.bot.name,
-      jsonlPath: s.filePath,
-      newSessionId: sessionShortId(s),
-      currentBinding: result.currentBinding
-    });
-  } else {
-    emit('bind', { botId: props.bot.id, jsonlPath: s.filePath });
+  // Skip if bound elsewhere (cross-bot), already bound to THIS bot (no-op self
+  // rebind), or a pick is already in flight (double-click guard).
+  if (isBoundElsewhere(s) || isBoundToThisBot(s) || !props.bot || picking.value) return;
+  picking.value = true;
+  try {
+    const result = await feishuStore.bindSessionToBot({ botId: props.bot.id, jsonlPath: s.filePath });
+    if (!result.success) return;
+    if (result.needsRebind) {
+      emit('rebind-needed', {
+        botId: props.bot.id,
+        botName: props.bot.name,
+        jsonlPath: s.filePath,
+        newSessionId: sessionShortId(s),
+        currentBinding: result.currentBinding
+      });
+    } else {
+      emit('bind', { botId: props.bot.id, jsonlPath: s.filePath });
+    }
+  } finally {
+    picking.value = false;
   }
 }
 

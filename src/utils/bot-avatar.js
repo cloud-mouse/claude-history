@@ -21,8 +21,11 @@ const AVATAR_GRADIENTS = [
  * @returns {string}
  */
 export function avatarGradient(id) {
-  const idx = (Number(id) - 1) % AVATAR_GRADIENTS.length;
-  return AVATAR_GRADIENTS[idx] || AVATAR_GRADIENTS[0];
+  const len = AVATAR_GRADIENTS.length;
+  // Normalize to a non-negative index: (Number(id) || 1) guards NaN/0, the
+  // (+ len) % len wrap maps -1 (and any negative) into a valid slot.
+  const idx = (((Number(id) || 1) - 1) % len + len) % len;
+  return AVATAR_GRADIENTS[idx];
 }
 
 /**

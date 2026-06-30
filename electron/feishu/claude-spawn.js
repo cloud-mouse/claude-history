@@ -108,9 +108,19 @@ function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, hookToken
     // Log without the user message / token to avoid leaking sensitive content.
     console.log(`[feishu:spawn] ${claudeBin} (mode=${toClaudePermissionMode(permissionMode)}, ${args.length} args) in ${cwd || 'default cwd'}`);
 
+    // Strip obviously-sensitive env vars before handing the rest to Claude. We
+    // still forward process.env (Claude needs HOME/LANG/SHELL/etc.), but never
+    // leak credentials that happen to live in the main-process environment.
+    const SENSITIVE_ENV_RE = /(?:SECRET|TOKEN|PASSWORD|PASSPHRASE|CREDENTIAL|PRIVATE.?KEY|API.?KEY|ACCESS.?KEY)/i;
+    const childEnv = {};
+    for (const [k, v] of Object.entries(process.env)) {
+      if (!SENSITIVE_ENV_RE.test(k)) childEnv[k] = v;
+    }
+    childEnv.PATH = resolveShellPath();
+
     const child = spawn(claudeBin, args, {
       cwd: cwd || undefined,
-      env: { ...process.env, PATH: resolveShellPath() },
+      env: childEnv,
       stdio: ['pipe', 'pipe', 'pipe']
     });
 

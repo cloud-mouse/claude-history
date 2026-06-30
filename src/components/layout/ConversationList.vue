@@ -68,7 +68,8 @@
       @confirm="onRebindConfirm"
     />
 
-    <!-- Unbind confirmation (which bot to unbind, if multiple bind the same session is impossible, but be safe) -->
+    <!-- Unbind confirmation. Each session is bound by at most one bot (per-bot
+         single binding), so we always know the exact bot to unbind. -->
     <ConfirmDialog
       :show="unbindConfirm.show"
       title="解除绑定"
@@ -87,7 +88,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onUnmounted } from 'vue';
 import { cleanTitle } from '../../utils/title-extractor.js';
 import { resolveProjectDir } from '../../utils/project-path.js';
 import { buildResumeCommand } from '../../utils/conversation-resume.js';
@@ -237,6 +238,8 @@ function showToast(message, success) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { toast.value = null; }, 4000);
 }
+// Clear the pending toast timer on unmount so it can't fire on a gone instance.
+onUnmounted(() => { if (toastTimer) clearTimeout(toastTimer); });
 
 function confirmDelete(conv) {
   pendingDelete.value = {

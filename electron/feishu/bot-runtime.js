@@ -161,8 +161,11 @@ class BotRuntime {
 
     this.wsClient = new WSClient({
       appId: this.bot.app_id, appSecret,
-      onReconnecting: () => { this.online = false; this.botManager.broadcastStatus(); },
-      onReconnected: () => { this.online = true; this.botManager.broadcastStatus(); }
+      // Guard with active/generation: after stop() the SDK may still auto-reconnect
+      // (autoReconnect defaults on), and a stale socket MUST NOT flip `online` back
+      // to true on a stopped/restarted bot. Mirrors the dispatcher guards above.
+      onReconnecting: () => { if (!this.active || gen !== this.generation) return; this.online = false; this.botManager.broadcastStatus(); },
+      onReconnected: () => { if (!this.active || gen !== this.generation) return; this.online = true; this.botManager.broadcastStatus(); }
     });
 
     try {
@@ -191,6 +194,14 @@ class BotRuntime {
     for (const [, entry] of this._switchPending) { clearTimeout(entry.timeout); }
     this._switchPending.clear();
     this.permissions.clearAll();
+    // Resolve any pending legacy (confirm-mode) confirmations so a stopped bot's
+    // _processing flag can't stay stuck waiting on a 5-min timer; otherwise a quick
+    // disable→enable reuse would leave the runtime silently "busy" (design §6.4).
+    for (const [, entry] of this._legacyConfirmations) {
+      if (entry && typeof entry.resolve === 'function') entry.resolve(false);
+      if (entry && entry.timeout) clearTimeout(entry.timeout);
+    }
+    this._legacyConfirmations.clear();
     // Best-effort physical disconnect; the SDK exposes no public stop(), and
     // autoReconnect defaults on. The real safety boundary is active/generation.
     try { this.wsClient?.wsConfig?.getWSInstance?.()?.terminate?.(); } catch {}
@@ -397,6 +408,10 @@ class BotRuntime {
 
   // Instance-level serialization: one message at a time per bot, bots run in
   // parallel (design §5.3). chatId is only used for the "busy" notice.
+  // INVARIANT: the `if (this._processing)` check and the `this._processing = true`
+  // assignment below MUST stay back-to-back with NO `await` between them — under
+  // Node's single thread that is what makes this a real mutex (two concurrent
+  // dispatcher callbacks can never both pass the check). Do not insert awaits here.
   async _withProcessing(chatId, fn) {
     if (this._processing) {
       await this._sendCard(chatId, buildWarningCard('⏳ 请稍候', '正在处理上一条消息，请等待完成后再发送新消息')).catch(() => {});

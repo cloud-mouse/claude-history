@@ -160,6 +160,7 @@ export const useFeishuStore = defineStore('feishu', () => {
    * @returns {Promise<{ success: boolean, error?: string, code?: string }>}
    */
   async function toggleBot(payload) {
+    loading.value = true;
     error.value = null;
     try {
       const result = await window.electronAPI.feishuToggleBot(payload);
@@ -183,6 +184,8 @@ export const useFeishuStore = defineStore('feishu', () => {
     } catch (err) {
       error.value = err.message;
       return { success: false, error: err.message };
+    } finally {
+      loading.value = false;
     }
   }
 

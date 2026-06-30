@@ -45,6 +45,7 @@ function registerFeishuIpc(ipcMain, botManager, store) {
       const status = botManager.getStatus().bots.find((b) => b.id === botId);
       if (!status) return { success: false, error: '机器人不存在' };
       if (status.online) return { success: false, error: '请先停用机器人再删除', code: 'BOT_ONLINE' };
+      if (status.processing) return { success: false, error: '机器人正在处理消息，请等待完成或 /cancel 后再删除', code: 'BOT_PROCESSING' };
       if (status.binding) return { success: false, error: '请先解绑机器人再删除', code: 'BOT_BOUND' };
       await botManager.deleteBot(botId);
       return { success: true };
