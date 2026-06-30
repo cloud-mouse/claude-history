@@ -171,7 +171,7 @@ npx jest
 
 通过飞书机器人远程与 Claude Code 交互，无需在电脑前也能继续对话。claude-history 支持**多个机器人并存**：每个机器人是一个独立的飞书自建应用（拥有各自的 App ID / App Secret 与 WebSocket 长连接），绑定到各自的服务工作目录，多机器人并行运行、互不干扰。你可以为不同项目各配一个机器人。
 
-> 术语以 [CONTEXT.md](../CONTEXT.md) 为准：机器人 (Bot) / 连接 (online) / 启用 (enabled) / 绑定 (binding) / 处理中 (processing)。
+> 术语以 [CONTEXT.md](https://github.com/cloud-mouse/claude-history/blob/main/CONTEXT.md) 为准：机器人 (Bot) / 连接 (online) / 启用 (enabled) / 绑定 (binding) / 处理中 (processing)。
 
 ### 工作原理
 

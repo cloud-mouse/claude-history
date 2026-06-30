@@ -14,7 +14,7 @@ claude-history 支持**多个飞书机器人并存**：每个机器人是一个�
 | **绑定 (binding)** | **每个机器人至多一个活跃绑定**（机器人 ↔ 某个对话）。到达某机器人的消息只会路由到它自己的活跃绑定，与飞书聊天/chat_id 无关。多个机器人可以各自持有一个绑定并发运行。 |
 | **处理中 (processing)** | 每个机器人一次只处理一条消息（机器人内部串行），机器人之间并行。 |
 
-> 术语权威定义见 [CONTEXT.md](../CONTEXT.md)。请避免使用 app、bridge（作为单个机器人的名词）、logged in、global singleton 等旧称。
+> 术语权威定义见 [CONTEXT.md](https://github.com/cloud-mouse/claude-history/blob/main/CONTEXT.md)。请避免使用 app、bridge（作为单个机器人的名词）、logged in、global singleton 等旧称。
 
 ## 工作原理
 
@@ -251,4 +251,4 @@ claude-history 内置了丰富的命令系统，支持中英文双语命令，**
 
 使用 `/permission bypass` 切换到全自动模式，或用 `/allow Bash` 等命令单独放行特定工具。
 
-更多运维与架构细节请参考[操作指南](./operations.md)与[飞书桥连集成方案](../FEISHU_BRIDGE_PLAN.md)。
+更多运维与架构细节请参考[操作指南](./operations.md)与[多机器人架构决策](./adr/0003-feishu-multi-bot.md)。
