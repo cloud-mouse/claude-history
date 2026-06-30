@@ -39,16 +39,16 @@ describe('file-scanner', () => {
   }
 
   describe('scanConversations', () => {
-    test('returns empty array for empty directory', () => {
+    test('returns empty array for empty directory', async () => {
       const projectsDir = getProjectsDir();
       const projectPath = path.join(projectsDir, 'empty-project');
       createTestFile(path.join(projectPath, '.gitkeep'));
 
-      const conversations = scanConversations(projectPath);
+      const conversations = await scanConversations(projectPath);
       expect(conversations).toEqual([]);
     });
 
-    test('finds .jsonl files and returns their metadata', () => {
+    test('finds .jsonl files and returns their metadata', async () => {
       const projectsDir = getProjectsDir();
       const projectPath = path.join(projectsDir, 'jsonl-project');
       const filePath = path.join(projectPath, 'conversation.jsonl');
@@ -56,53 +56,53 @@ describe('file-scanner', () => {
       createTestFile(filePath, content);
       setFileTime(filePath, 1000000);
 
-      const conversations = scanConversations(projectPath);
+      const conversations = await scanConversations(projectPath);
       expect(conversations.length).toBe(1);
       expect(conversations[0].filePath).toBe(filePath);
       expect(conversations[0].fileSize).toBe(content.length);
       expect(conversations[0].updatedAt).toBe(1000000);
     });
 
-    test('ignores non-.jsonl files', () => {
+    test('ignores non-.jsonl files', async () => {
       const projectsDir = getProjectsDir();
       const projectPath = path.join(projectsDir, 'mixed-project');
       createTestFile(path.join(projectPath, 'readme.md'), '# Project');
       createTestFile(path.join(projectPath, 'data.json'), '{}');
       createTestFile(path.join(projectPath, 'conversation.jsonl'), 'test');
 
-      const conversations = scanConversations(projectPath);
+      const conversations = await scanConversations(projectPath);
       expect(conversations.length).toBe(1);
       expect(conversations[0].filePath).toContain('conversation.jsonl');
     });
 
-    test('finds multiple .jsonl files', () => {
+    test('finds multiple .jsonl files', async () => {
       const projectsDir = getProjectsDir();
       const projectPath = path.join(projectsDir, 'multi-project');
       createTestFile(path.join(projectPath, 'conv1.jsonl'), 'a');
       createTestFile(path.join(projectPath, 'conv2.jsonl'), 'bb');
       createTestFile(path.join(projectPath, 'conv3.jsonl'), 'ccc');
 
-      const conversations = scanConversations(projectPath);
+      const conversations = await scanConversations(projectPath);
       expect(conversations.length).toBe(3);
     });
 
-    test('returns empty array for non-existent directory', () => {
-      const conversations = scanConversations('/non/existent/path');
+    test('returns empty array for non-existent directory', async () => {
+      const conversations = await scanConversations('/non/existent/path');
       expect(conversations).toEqual([]);
     });
   });
 
   describe('scanProjects', () => {
-    test('returns empty array for empty projects directory', () => {
+    test('returns empty array for empty projects directory', async () => {
       const projectsDir = getProjectsDir();
       // Create empty projects dir with only a .gitkeep
       createTestFile(path.join(projectsDir, '.gitkeep'), '');
 
-      const projects = scanProjects(projectsDir);
+      const projects = await scanProjects(projectsDir);
       expect(projects).toEqual([]);
     });
 
-    test('finds project directories and their conversations', () => {
+    test('finds project directories and their conversations', async () => {
       const projectsDir = getProjectsDir();
 
       const project1Path = path.join(projectsDir, 'project-one');
@@ -115,7 +115,7 @@ describe('file-scanner', () => {
       createTestFile(conv2Path, 'content2');
       setFileTime(conv2Path, 3000000);
 
-      const projects = scanProjects(projectsDir);
+      const projects = await scanProjects(projectsDir);
       expect(projects.length).toBe(2);
 
       // Check structure of returned projects
@@ -141,29 +141,29 @@ describe('file-scanner', () => {
       expect(proj2.conversations[0].filePath).toBe(conv2Path);
     });
 
-    test('ignores files in projects directory (only looks at subdirectories)', () => {
+    test('ignores files in projects directory (only looks at subdirectories)', async () => {
       const projectsDir = getProjectsDir();
       // Create a file directly in projects dir (not in a subdirectory)
       createTestFile(path.join(projectsDir, 'not-a-project.jsonl'), 'data');
 
-      const projects = scanProjects(projectsDir);
+      const projects = await scanProjects(projectsDir);
       expect(projects.length).toBe(0);
     });
 
-    test('handles nested subdirectories (files only, no recursion into sub-subdirs)', () => {
+    test('handles nested subdirectories (files only, no recursion into sub-subdirs)', async () => {
       const projectsDir = getProjectsDir();
       const projectPath = path.join(projectsDir, 'nested-test');
       createTestFile(path.join(projectPath, 'root-conversation.jsonl'), 'root');
       createTestFile(path.join(projectPath, 'subdir', 'nested-conversation.jsonl'), 'nested');
 
-      const conversations = scanConversations(projectPath);
+      const conversations = await scanConversations(projectPath);
       // Only files directly in project directory are returned
       expect(conversations.length).toBe(1);
       expect(conversations[0].filePath).toContain('root-conversation.jsonl');
     });
 
-    test('returns empty array for non-existent projects directory', () => {
-      const projects = scanProjects('/non/existent/projects/dir');
+    test('returns empty array for non-existent projects directory', async () => {
+      const projects = await scanProjects('/non/existent/projects/dir');
       expect(projects).toEqual([]);
     });
   });

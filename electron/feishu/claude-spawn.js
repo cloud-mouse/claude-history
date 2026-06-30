@@ -52,16 +52,25 @@ function resolveClaudeBinary() {
   return 'claude';
 }
 
+function shellQuote(value) {
+  return `'${String(value ?? '').replace(/'/g, `'\\''`)}'`;
+}
+
 function generateHookSettings(hookPort, hookToken, botId, chatId) {
   const hookScriptPath = path.join(__dirname, '..', 'feishu-hook-script.js');
   // botId/chatId are injected so the hook handler can route the confirmation
   // card back to the originating bot+chat (design §8.2).
-  const env = `FEISHU_HOOK_PORT=${hookPort} FEISHU_HOOK_TOKEN=${hookToken} FEISHU_BOT_ID=${botId ?? ''} FEISHU_CHAT_ID=${chatId ?? ''}`;
+  const env = [
+    ['FEISHU_HOOK_PORT', hookPort],
+    ['FEISHU_HOOK_TOKEN', hookToken],
+    ['FEISHU_BOT_ID', botId ?? ''],
+    ['FEISHU_CHAT_ID', chatId ?? '']
+  ].map(([key, value]) => `${key}=${shellQuote(value)}`).join(' ');
   const settings = {
     hooks: {
       PreToolUse: [{
         matcher: 'Bash|Write|Edit|MultiEdit',
-        hooks: [{ type: 'command', command: `${env} node ${hookScriptPath}`, timeout: 60 }]
+        hooks: [{ type: 'command', command: `${env} node ${shellQuote(hookScriptPath)}`, timeout: 60 }]
       }]
     }
   };
@@ -194,4 +203,4 @@ function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, hookToken
   });
 }
 
-module.exports = { spawnClaude, resolveClaudeBinary, resolveShellPath, generateHookSettings };
+module.exports = { spawnClaude, resolveClaudeBinary, resolveShellPath, generateHookSettings, shellQuote };

@@ -151,15 +151,21 @@ class BotManager {
   }
 
   async toggleBot(botId, enabled) {
-    this.store.updateBot(botId, { enabled: !!enabled });
-    const bot = this.store.getBot(botId);
     if (enabled) {
+      const bot = this.store.getBot(botId);
       if (!bot) throw new Error('机器人不存在');
-      await this._ensureHooks();
-      await this._startRuntime(bot).catch((err) => {
-        console.error(`[feishu] bot ${botId} toggle-on failed:`, err.message);
-      });
+      try {
+        await this._ensureHooks();
+        await this._startRuntime(bot);
+        this.store.updateBot(botId, { enabled: true });
+      } catch (err) {
+        this.store.updateBot(botId, { enabled: false });
+        const rt = this.getRuntime(botId);
+        if (rt) await rt.stop().catch(() => {});
+        throw err;
+      }
     } else {
+      this.store.updateBot(botId, { enabled: false });
       // Stop but keep the runtime in the map: a residual spawn's hook can still
       // resolve via getRuntime and hit fail-closed (design §5.1).
       const rt = this.getRuntime(botId);

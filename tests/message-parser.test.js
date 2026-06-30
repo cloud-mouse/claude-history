@@ -127,6 +127,24 @@ describe('message-parser', () => {
       expect(result.blocks[0].isError).toBe(true);
     });
 
+    test('parses actual JSONL message wrapper with tool_result blocks', () => {
+      const raw = {
+        uuid: 'msg-004',
+        type: 'user',
+        message: {
+          content: [{ type: 'tool_result', content: 'Denied', is_error: true }]
+        },
+        session_id: 'session-wrapper'
+      };
+
+      const result = parseMessage(raw);
+      expect(result.id).toBe('msg-004');
+      expect(result.role).toBe('assistant');
+      expect(result.type).toBe('tool_result');
+      expect(result.sessionId).toBe('session-wrapper');
+      expect(result.blocks[0].isError).toBe(true);
+    });
+
     test('counts inputLines correctly for string input', () => {
       const raw = {
         id: 'msg-003',

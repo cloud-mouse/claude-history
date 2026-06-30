@@ -65,17 +65,20 @@ function enrichBlock(block) {
  * @returns {Object} Normalized message with enriched blocks
  */
 function parseMessage(raw) {
-  const type = raw.type || null;
+  let type = raw.type || null;
   const message = raw.message || {};
+  const content = Object.prototype.hasOwnProperty.call(message, 'content')
+    ? message.content
+    : raw.content;
 
   // Determine the actual role based on message type and content
   let role = type;
 
   // Check if this is a tool result message (stored as type="user" but contains tool_result blocks)
   // These are actually Claude's tool execution results, not user messages
-  if (type === 'user' && message.content) {
-    const content = Array.isArray(message.content) ? message.content : [];
-    const hasToolResult = content.some(block =>
+  if (type === 'user' && content) {
+    const contentBlocks = Array.isArray(content) ? content : [];
+    const hasToolResult = contentBlocks.some(block =>
       block && typeof block === 'object' && block.type === 'tool_result'
     );
     if (hasToolResult) {
@@ -86,8 +89,8 @@ function parseMessage(raw) {
 
   // Extract content based on message type
   let blocks = [];
-  if (type === 'user' || type === 'assistant' || type === 'last-prompt') {
-    blocks = normalizeContent(message.content || []);
+  if (type === 'user' || type === 'assistant' || type === 'last-prompt' || type === 'tool_result') {
+    blocks = normalizeContent(content || []);
   } else if (type === 'attachment') {
     // Attachments have a different structure
     blocks = normalizeContent(raw.attachment ? [raw.attachment] : []);
@@ -102,7 +105,7 @@ function parseMessage(raw) {
     type: type,
     blocks: enrichedBlocks,
     timestamp: raw.timestamp || null,
-    sessionId: raw.sessionId || null,
+    sessionId: raw.sessionId || raw.session_id || null,
   };
 
   // Add type-specific fields
