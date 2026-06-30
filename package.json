@@ -1,6 +1,6 @@
 {
   "name": "claude-history",
-  "version": "1.5.2",
+  "version": "1.6.0",
   "description": "Browse Claude Code conversation history",
   "main": "electron/index.js",
   "repository": {

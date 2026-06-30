@@ -15,6 +15,10 @@
 
 尚未发布的内容将在此处汇总。
 
+---
+
+## [1.6.0] — 2026-06-30
+
 ### 🆕 新增
 
 - **飞书多机器人**：从单机器人升级为多机器人架构——每个机器人是一个独立的飞书自建应用（独立 App ID/Secret + WebSocket 长连接），绑定到各自的服务工作目录，多机器人并发运行、互不干扰。可为不同项目各配一个机器人。
@@ -178,7 +182,8 @@
 
 ---
 
-[Unreleased]: https://github.com/cloud-mouse/claude-history/compare/v1.5.2...HEAD
+[Unreleased]: https://github.com/cloud-mouse/claude-history/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/cloud-mouse/claude-history/releases/tag/v1.6.0
 [1.5.2]: https://github.com/cloud-mouse/claude-history/releases/tag/v1.5.2
 [1.5.1]: https://github.com/cloud-mouse/claude-history/releases/tag/v1.5.1
 [1.5.0]: https://github.com/cloud-mouse/claude-history/releases/tag/v1.5.0
