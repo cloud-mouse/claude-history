@@ -65,6 +65,16 @@ function resolveCwd(jsonlPath) {
   return decodeProjectSlug(slug);
 }
 
+// Build the jsonl path Claude CLI uses for a given cwd + session id:
+// ~/.claude/projects/<cwd-with-slashes-as-dashes>/<sessionId>.jsonl. Mirrors the
+// slug scheme Claude itself uses for its projects dir, so the path matches the
+// file Claude actually writes — used to reconcile bindings after a fresh session.
+function jsonlPathForCwd(cwd, sessionId) {
+  if (!cwd || !sessionId) return null;
+  const slug = cwd.replace(/\//g, '-');
+  return path.join(os.homedir(), '.claude', 'projects', slug, `${sessionId}.jsonl`);
+}
+
 function watchBinding(binding, onChange) {
   if (!binding || !binding.jsonl_path) return () => {};
   const jsonlPath = binding.jsonl_path;
@@ -116,4 +126,4 @@ function watchBinding(binding, onChange) {
   return cleanup;
 }
 
-module.exports = { decodeProjectSlug, resolveCwd, watchBinding };
+module.exports = { decodeProjectSlug, resolveCwd, watchBinding, jsonlPathForCwd };

@@ -259,8 +259,8 @@ async function cmdRepeat(ctx) {
     try {
       const currentBinding = store.getActiveBindingByBot(botId);
       if (!currentBinding) throw new Error('绑定已失效');
-      await ctx.spawnClaude({ sessionId: currentBinding.session_id, jsonlPath: currentBinding.jsonl_path, message: lastMessage, chatId });
-      ctx.notifyRenderer('feishu:jsonlChanged', { jsonlPath: currentBinding.jsonl_path, sessionId: currentBinding.session_id, botId });
+      const retryResult = await ctx.spawnClaude({ sessionId: currentBinding.session_id, jsonlPath: currentBinding.jsonl_path, message: lastMessage, chatId });
+      ctx.notifyRenderer('feishu:jsonlChanged', { jsonlPath: (retryResult && retryResult.jsonlPath) || currentBinding.jsonl_path, sessionId: (retryResult && retryResult.sessionId) || currentBinding.session_id, botId });
     } catch (err) { if (!err._cardHandled) await ctx.sendCard(chatId, buildErrorCard(err.message)).catch(() => {}); }
   });
 }
@@ -276,8 +276,8 @@ async function cmdSystem(ctx) {
     try {
       const currentBinding = store.getActiveBindingByBot(botId);
       if (!currentBinding) throw new Error('绑定已失效');
-      await ctx.spawnClaude({ sessionId: currentBinding.session_id, jsonlPath: currentBinding.jsonl_path, message: `[System Instruction] ${args}`, chatId });
-      ctx.notifyRenderer('feishu:jsonlChanged', { jsonlPath: currentBinding.jsonl_path, sessionId: currentBinding.session_id, botId });
+      const injectResult = await ctx.spawnClaude({ sessionId: currentBinding.session_id, jsonlPath: currentBinding.jsonl_path, message: `[System Instruction] ${args}`, chatId });
+      ctx.notifyRenderer('feishu:jsonlChanged', { jsonlPath: (injectResult && injectResult.jsonlPath) || currentBinding.jsonl_path, sessionId: (injectResult && injectResult.sessionId) || currentBinding.session_id, botId });
     } catch (err) { if (!err._cardHandled) await ctx.sendCard(chatId, buildErrorCard(err.message)).catch(() => {}); }
   });
 }

@@ -143,6 +143,7 @@ function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, hookToken
     let resultText = '';
     let resultMeta = null;
     let resolved = false;
+    let realSessionId = null;
 
     child.stdout.on('data', (data) => {
       jsonBuf += data.toString();
@@ -153,6 +154,10 @@ function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, hookToken
         if (!line) continue;
         try {
           const obj = JSON.parse(line);
+          // Capture the session id Claude actually used. Every stream-json frame
+          // carries it; we need the real id when Claude mints a fresh session
+          // (no --resume) so the caller can reconcile the binding.
+          if (obj.session_id && !realSessionId) realSessionId = obj.session_id;
           if (obj.type === 'result') {
             if (obj.result) resultText = obj.result;
             // Capture usage/cost/duration (only available from the live result frame).
@@ -179,7 +184,7 @@ function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, hookToken
           // Early resolve: send result as soon as we get it, don't wait for process exit
           if (obj.type === 'result' && !resolved) {
             resolved = true;
-            resolve({ text: resultText || '(空响应)', meta: resultMeta });
+            resolve({ text: resultText || '(空响应)', meta: resultMeta, sessionId: realSessionId });
           }
         } catch {}
       }
@@ -192,7 +197,7 @@ function spawnClaude({ sessionId, jsonlPath, message, model, hookPort, hookToken
     child.on('close', (code) => {
       if (settingsPath) try { fs.unlinkSync(settingsPath); } catch {}
       if (resolved) return; // Already resolved via early result
-      if (code === 0) resolve({ text: resultText || '(空响应)', meta: resultMeta });
+      if (code === 0) resolve({ text: resultText || '(空响应)', meta: resultMeta, sessionId: realSessionId });
       else reject(new Error(`Claude Code 错误: ${(stderr.trim() || 'exit code ' + code).slice(0, 200)}`));
     });
 

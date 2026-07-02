@@ -9,7 +9,7 @@ const { WSClient, EventDispatcher, Client } = require('@larksuiteoapi/node-sdk')
 const { PermissionManager } = require('./permissions');
 const { handleCommand } = require('./commands');
 const { spawnClaude } = require('./claude-spawn');
-const { resolveCwd, watchBinding } = require('./binding');
+const { resolveCwd, watchBinding, jsonlPathForCwd } = require('./binding');
 const { buildResponseCard, buildProgressCard, buildErrorCard, buildWarningCard, buildConfirmResultCard, buildSwitchConfirmCard, extractCardText } = require('./cards');
 
 // Per-bot attachment download root. Keyed by bot+chat so one bot/chat's Claude
@@ -294,13 +294,18 @@ class BotRuntime {
           attachmentDirs = [attachmentDirForBotChat(this.botId, chatId)];
         }
 
-        await this._doSpawnClaude({ sessionId: binding.session_id, jsonlPath: binding.jsonl_path, message: fullMessage, chatId, addDirs: attachmentDirs });
-        this._touchConversation(binding.jsonl_path);
+        const spawnResult = await this._doSpawnClaude({ sessionId: binding.session_id, jsonlPath: binding.jsonl_path, message: fullMessage, chatId, addDirs: attachmentDirs });
+        // _doSpawnClaude reconciles the binding when Claude starts a fresh session
+        // (/new or a missing jsonl); use the resolved path so the UI highlights the
+        // actually-active conversation instead of the stale binding value.
+        const activeJsonl = (spawnResult && spawnResult.jsonlPath) || binding.jsonl_path;
+        const activeSessionId = (spawnResult && spawnResult.sessionId) || binding.session_id;
+        this._touchConversation(activeJsonl);
 
         if (reactionId) this._deleteReaction(msg.messageId, reactionId).catch(() => {});
 
         this._lastMessage = messageText;
-        this._notifyRenderer('feishu:jsonlChanged', { jsonlPath: binding.jsonl_path, sessionId: binding.session_id, botId: this.botId });
+        this._notifyRenderer('feishu:jsonlChanged', { jsonlPath: activeJsonl, sessionId: activeSessionId, botId: this.botId });
       } catch (err) {
         if (reactionId) this._deleteReaction(msg.messageId, reactionId).catch(() => {});
         if (!err._cardHandled) await this._sendCard(chatId, buildErrorCard(err.message)).catch(() => {});
@@ -330,14 +335,32 @@ class BotRuntime {
       },
       onToolUse: () => {},
       onProgress: (patch) => self._onClaudeProgress(patch)
-    }).then(({ text, meta }) => {
+    }).then(({ text, meta, sessionId: realId }) => {
+      // Reconcile binding when Claude started a fresh session. spawnClaude only
+      // adds --resume when the jsonl exists; after /new (or a deleted jsonl) the
+      // file is absent, so Claude mints a brand-new session id. Persist that real
+      // id back so the next message resumes it instead of spawning yet another
+      // new session every time.
+      let activeJsonl = jsonlPath;
+      let activeId = sessionId;
+      if (realId && realId !== sessionId) {
+        const realJsonl = jsonlPathForCwd(self.bot.project_dir, realId);
+        if (realJsonl) {
+          try {
+            self.store.updateBindingByBot(self.botId, { sessionId: realId, jsonlPath: realJsonl });
+            self.watchActiveBinding();
+            activeJsonl = realJsonl;
+            activeId = realId;
+          } catch (err) { console.warn('[feishu] binding reconcile failed:', err.message); }
+        }
+      }
       if (meta && (meta.costUsd != null || meta.durationMs != null)) {
         try {
-          const conv = self.store.getConversationByFilePath(jsonlPath);
+          const conv = self.store.getConversationByFilePath(activeJsonl);
           if (conv) self.store.updateRuntime(conv.id, { costUsd: meta.costUsd, durationMs: meta.durationMs, runAt: Date.now() });
         } catch (err) { console.warn('[feishu] updateRuntime failed:', err.message); }
       }
-      return self._finishProgressCard(chatId, text).then(() => text);
+      return self._finishProgressCard(chatId, text).then(() => ({ text, jsonlPath: activeJsonl, sessionId: activeId }));
     }).catch((err) => {
       self._abortProgressCard(chatId, err.message);
       if (!err._cardHandled) {
