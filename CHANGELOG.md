@@ -17,6 +17,14 @@
 
 ---
 
+## [1.7.0] — 2026-07-17
+
+### 🆕 新增
+
+- **一键导出会话为 Markdown**：消息详情页新增「导出」按钮，一键将当前会话导出为可移植的 Markdown 文档（系统另存为对话框，文件名预填会话标题）。导出内容包含用户与 Claude 的对话、工具调用及执行结果（Bash / Edit / Read / Grep 等按类型友好渲染），省略思维过程，便于复盘与分享。
+
+---
+
 ## [1.6.1] — 2026-07-03
 
 ### 🐛 修复
@@ -191,7 +199,8 @@
 
 ---
 
-[Unreleased]: https://github.com/cloud-mouse/claude-history/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/cloud-mouse/claude-history/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/cloud-mouse/claude-history/releases/tag/v1.7.0
 [1.6.0]: https://github.com/cloud-mouse/claude-history/releases/tag/v1.6.0
 [1.5.2]: https://github.com/cloud-mouse/claude-history/releases/tag/v1.5.2
 [1.5.1]: https://github.com/cloud-mouse/claude-history/releases/tag/v1.5.1
