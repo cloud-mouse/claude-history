@@ -1,6 +1,6 @@
 'use strict';
 
-const { ipcMain, shell } = require('electron');
+const { ipcMain, shell, dialog } = require('electron');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
@@ -12,6 +12,7 @@ const { parseStream } = require('./jsonl-parser');
 const { parseMessage } = require('./message-parser');
 const { extractTitleFromJsonl } = require('./title-extractor');
 const { openProjectWith } = require('./project-opener');
+const { conversationToMarkdown, sanitizeFilename } = require('./conversation-export');
 
 // Lazy-initialize store to allow data directory creation
 let _store = null;
@@ -554,6 +555,64 @@ function registerIpcHandlers() {
       await shell.openExternal(url);
       return { success: true };
     } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  // export-conversation — Serialize a conversation to Markdown and write it to
+  // a user-chosen path via a native save dialog. The renderer passes only
+  // plain serializable values (filePath + title + updatedAt); the main process
+  // re-reads the messages itself. Passing the renderer's reactive message tree
+  // over IPC fails structured-clone ("An object could not be cloned") and would
+  // duplicate the data.
+  ipcMain.handle('export-conversation', async (_, data) => {
+    try {
+      const { filePath, title, updatedAt } = data || {};
+
+      // Resolve messages: prefer the LRU cache used by load-conversation,
+      // otherwise re-parse the jsonl on the fly. projectDir is recovered from
+      // the first user message's cwd, matching load-conversation.
+      let messages = null;
+      let projectDir = null;
+      const cached = filePath ? getFromCache(filePath) : null;
+      if (cached) {
+        messages = cached.messages;
+        projectDir = cached.projectDir;
+      } else if (filePath) {
+        messages = [];
+        await parseStream(filePath, (raw) => {
+          if (!projectDir && raw.type === 'user' && raw.cwd) {
+            projectDir = raw.cwd;
+          }
+          messages.push(parseMessage(raw));
+        });
+      }
+
+      const markdown = conversationToMarkdown({
+        messages: messages || [],
+        title,
+        projectDir,
+        updatedAt,
+      });
+      const defaultName = sanitizeFilename(title) + '.md';
+
+      const result = await dialog.showSaveDialog({
+        title: '导出会话为 Markdown',
+        defaultPath: defaultName,
+        filters: [
+          { name: 'Markdown', extensions: ['md'] },
+          { name: '所有文件', extensions: ['*'] }
+        ]
+      });
+
+      if (result.canceled || !result.filePath) {
+        return { success: true, canceled: true };
+      }
+
+      fs.writeFileSync(result.filePath, markdown, 'utf8');
+      return { success: true, filePath: result.filePath, canceled: false };
+    } catch (err) {
+      console.error('[ipc-handlers] export-conversation error:', err.message);
       return { success: false, error: err.message };
     }
   });

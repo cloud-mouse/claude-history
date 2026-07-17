@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteProject: (projectId) => ipcRenderer.invoke('delete-project', projectId),
   resumeConversation: (filePath, projectDir) => ipcRenderer.invoke('resume-conversation', filePath, projectDir),
   openProjectWith: (tool, projectDir) => ipcRenderer.invoke('open-project-with', tool, projectDir),
+  exportConversation: (data) => ipcRenderer.invoke('export-conversation', data),
 
   // Appearance — frosted glass toggle (main process owns the native material)
   getFrostedGlass: () => ipcRenderer.invoke('appearance:getFrostedGlass'),

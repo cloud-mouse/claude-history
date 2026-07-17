@@ -25,6 +25,14 @@
           <button class="expand-btn" @click="toggleAll">
             {{ allExpanded ? '收起全部' : '展开全部' }}
           </button>
+          <button
+            class="expand-btn"
+            :disabled="exporting"
+            @click="exportMarkdown"
+            title="导出为 Markdown 文件"
+          >
+            {{ exportLabel }}
+          </button>
           <ProjectToolOpener :project-dir="projectDir" />
         </div>
       </div>
@@ -204,6 +212,9 @@ watch(() => props.conversation, () => {
   bubbleRefs.value = {};
   allExpanded.value = false;
   showBackToTop.value = false;
+  if (exportResetTimer) clearTimeout(exportResetTimer);
+  exporting.value = false;
+  exportLabel.value = '导出';
 });
 
 // Auto-scroll to bottom on new messages
@@ -224,6 +235,40 @@ function handleScroll() {
 function scrollToTop() {
   if (messagesContainer.value) {
     messagesContainer.value.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+
+// Export the current conversation to a Markdown file via the main process
+// (native save dialog + write). The button reflects in-flight and outcome
+// state, then resets back to the idle label after a short delay.
+const exporting = ref(false);
+const exportLabel = ref('导出');
+let exportResetTimer = null;
+
+async function exportMarkdown() {
+  if (!props.conversation || exporting.value) return;
+  exporting.value = true;
+  exportLabel.value = '导出中…';
+  if (exportResetTimer) clearTimeout(exportResetTimer);
+  try {
+    const result = await window.electronAPI.exportConversation({
+      filePath: props.conversation.filePath,
+      title: props.conversation.title,
+      updatedAt: props.conversation.updatedAt,
+    });
+    if (result?.canceled) {
+      exportLabel.value = '已取消';
+    } else if (result?.success) {
+      exportLabel.value = '已导出 ✓';
+    } else {
+      exportLabel.value = '导出失败';
+    }
+  } catch (err) {
+    console.error('[MessageThread] export failed:', err);
+    exportLabel.value = '导出失败';
+  } finally {
+    exporting.value = false;
+    exportResetTimer = setTimeout(() => { exportLabel.value = '导出'; }, 2200);
   }
 }
 </script>
