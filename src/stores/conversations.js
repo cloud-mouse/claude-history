@@ -9,40 +9,54 @@ export const useConversationsStore = defineStore('conversations', () => {
   const skippedMessages = ref(0);
   const cache = new Map();
   const titleMap = reactive({});
+  let openRequestId = 0;
+
+  function conversationKey(source, filePath) {
+    return `${source || 'claude'}:${filePath || ''}`;
+  }
 
   const selectedConv = computed(() =>
     activeConversation.value?.messages?.find(m => m.id === selectedConvId.value) || null
   );
 
   async function openConversation(conv, forceReload = false, focusMessageId = null) {
+    const source = conv.source || 'claude';
+    const cacheKey = conversationKey(source, conv.filePath);
     // If the same conversation is already open, just (re)focus a message if asked.
-    if (!forceReload && activeConversation.value?.filePath === conv.filePath) {
+    if (!forceReload
+      && activeConversation.value?.source === source
+      && activeConversation.value?.filePath === conv.filePath) {
       if (focusMessageId) scrollToMessage(focusMessageId);
       return;
     }
+    const requestId = ++openRequestId;
     loading.value = true;
     try {
       let conversation;
 
       // Use cache unless force-reloading (e.g. Feishu JSONL changed)
-      if (!forceReload && cache.has(conv.filePath)) {
-        conversation = cache.get(conv.filePath);
+      if (!forceReload && cache.has(cacheKey)) {
+        conversation = cache.get(cacheKey);
       } else {
-        const result = await window.electronAPI.loadConversation(conv.filePath);
+        const result = await window.electronAPI.loadConversation(conv.filePath, source);
+        if (requestId !== openRequestId) return;
         if (result.success) {
           conversation = {
+            source,
             filePath: conv.filePath,
+            sessionId: conv.sessionId || null,
             title: cleanTitle(conv.title) || '',
             updatedAt: conv.updatedAt,
             messages: result.messages || [],
             projectDir: result.projectDir || null,
+            archived: conv.archived === true,
             skippedCount: 0
           };
           if (cache.size >= 20) {
             const firstKey = cache.keys().next().value;
             cache.delete(firstKey);
           }
-          cache.set(conv.filePath, conversation);
+          cache.set(cacheKey, conversation);
         } else {
           console.error('[conversations store] load failed:', result.error);
           activeConversation.value = null;
@@ -50,6 +64,7 @@ export const useConversationsStore = defineStore('conversations', () => {
         }
       }
 
+      if (requestId !== openRequestId) return;
       activeConversation.value = conversation;
 
       // Auto-generate title if not present
@@ -62,7 +77,9 @@ export const useConversationsStore = defineStore('conversations', () => {
             if (title) {
               titleMap[conv.filePath] = title;
               conversation.title = title;
-              await window.electronAPI.updateTitle(conv.id, title);
+              if (source === 'claude') {
+                await window.electronAPI.updateTitle(conv.id, title);
+              }
             }
           }
         }
@@ -70,7 +87,7 @@ export const useConversationsStore = defineStore('conversations', () => {
 
       if (focusMessageId) scrollToMessage(focusMessageId);
     } finally {
-      loading.value = false;
+      if (requestId === openRequestId) loading.value = false;
     }
   }
 
@@ -88,7 +105,11 @@ export const useConversationsStore = defineStore('conversations', () => {
     });
   }
 
-  function clearActive() { activeConversation.value = null; }
+  function clearActive() {
+    openRequestId += 1;
+    activeConversation.value = null;
+    loading.value = false;
+  }
 
   function clearCache() { cache.clear(); }
 
@@ -104,8 +125,10 @@ export const useConversationsStore = defineStore('conversations', () => {
     if (!conv) return;
 
     // Clear both backend and frontend caches before re-reading
-    await window.electronAPI.invalidateConversationCache(filePath);
-    cache.delete(filePath);
+    const source = conv.source || 'claude';
+    const cacheKey = conversationKey(source, filePath);
+    await window.electronAPI.invalidateConversationCache(filePath, source);
+    cache.delete(cacheKey);
 
     // Bypass cache + bypass early-return
     await openConversation(conv, true);

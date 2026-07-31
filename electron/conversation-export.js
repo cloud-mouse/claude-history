@@ -193,6 +193,7 @@ function conversationToMarkdown(conversation) {
   const conv = conversation || {};
   const messages = Array.isArray(conv.messages) ? conv.messages : [];
   const title = (conv.title || '未命名对话').trim();
+  const assistantLabel = conv.source === 'codex' ? 'Codex' : 'Claude';
 
   const lines = [];
   lines.push('# ' + title);
@@ -227,7 +228,7 @@ function conversationToMarkdown(conversation) {
 
     if (role !== lastRole) {
       if (lines.length > 0) lines.push('');
-      lines.push(role === 'user' ? '## 👤 用户' : '## 🤖 Claude');
+      lines.push(role === 'user' ? '## 👤 用户' : '## 🤖 ' + assistantLabel);
       lines.push('');
       lastRole = role;
     }

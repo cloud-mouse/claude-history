@@ -7,12 +7,16 @@ const os = require('os');
 const path = require('path');
 
 const { Store } = require('./store');
-const { scanProjects } = require('./file-scanner');
-const { parseStream } = require('./jsonl-parser');
-const { parseMessage } = require('./message-parser');
+const { scanProjects, scanCodexProjects } = require('./file-scanner');
 const { extractTitleFromJsonl } = require('./title-extractor');
 const { openProjectWith } = require('./project-opener');
 const { conversationToMarkdown, sanitizeFilename } = require('./conversation-export');
+const { loadConversationFile } = require('./conversation-loader');
+const {
+  normalizeSource,
+  getCodexHomeDir,
+  getConversationCacheKey,
+} = require('./conversation-source');
 
 // Lazy-initialize store to allow data directory creation
 let _store = null;
@@ -57,17 +61,17 @@ const pendingRequests = new Map();
 let _reindexRunning = false;
 let _reindexCancel = false;
 
-function addToCache(filePath, messages) {
+function addToCache(source, filePath, messages) {
   // Evict oldest entry if at capacity
   if (conversationCache.size >= MAX_CACHE_SIZE) {
     const oldestKey = conversationCache.keys().next().value;
     conversationCache.delete(oldestKey);
   }
-  conversationCache.set(filePath, messages);
+  conversationCache.set(getConversationCacheKey(source, filePath), messages);
 }
 
-function getFromCache(filePath) {
-  return conversationCache.get(filePath) || null;
+function getFromCache(source, filePath) {
+  return conversationCache.get(getConversationCacheKey(source, filePath)) || null;
 }
 
 /**
@@ -75,8 +79,14 @@ function getFromCache(filePath) {
  */
 function registerIpcHandlers() {
   // 1. scan-projects — Scan projects dir, upsert to SQLite, return enriched project list
-  ipcMain.handle('scan-projects', async () => {
+  ipcMain.handle('scan-projects', async (_, requestedSource) => {
     try {
+      const source = normalizeSource(requestedSource);
+      if (source === 'codex') {
+        const projects = await scanCodexProjects(getCodexHomeDir());
+        return { success: true, projects };
+      }
+
       const store = getStore();
       const projects = await scanProjects();
 
@@ -87,6 +97,7 @@ function registerIpcHandlers() {
       }
 
       for (const project of projects) {
+        project.source = 'claude';
         // Upsert project to SQLite
         store.upsertProject(project.name, project.path);
 
@@ -135,7 +146,10 @@ function registerIpcHandlers() {
           fileSize: conv.file_size,
           updatedAt: conv.updated_at,
           title: conv.title,
-          projectDir: conv.project_dir || null
+          projectDir: conv.project_dir || null,
+          source: 'claude',
+          archived: false,
+          sessionId: path.basename(conv.file_path, '.jsonl')
         }));
       }
 
@@ -153,10 +167,16 @@ function registerIpcHandlers() {
   });
 
   // invalidate-conversation-cache — Clear cache for a specific file
-  ipcMain.handle('invalidate-conversation-cache', async (_, filePath) => {
-    conversationCache.delete(filePath);
-    pendingRequests.delete(filePath);
-    return { success: true };
+  ipcMain.handle('invalidate-conversation-cache', async (_, filePath, requestedSource) => {
+    try {
+      const source = normalizeSource(requestedSource);
+      const cacheKey = getConversationCacheKey(source, filePath);
+      conversationCache.delete(cacheKey);
+      pendingRequests.delete(cacheKey);
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
   });
 
   // refresh-index — re-aggregate stats + rebuild FTS for one conversation.
@@ -295,7 +315,10 @@ function registerIpcHandlers() {
         fileSize: conv.file_size,
         updatedAt: conv.updated_at,
         title: conv.title,
-        projectDir: conv.project_dir || null
+        projectDir: conv.project_dir || null,
+        source: 'claude',
+        archived: false,
+        sessionId: path.basename(conv.file_path, '.jsonl')
       }));
       return { success: true, conversations };
     } catch (err) {
@@ -305,41 +328,45 @@ function registerIpcHandlers() {
   });
 
   // 3. load-conversation — Stream-parse .jsonl file, LRU cache, return messages
-  ipcMain.handle('load-conversation', async (_, filePath) => {
+  ipcMain.handle('load-conversation', async (_, filePath, requestedSource) => {
     try {
+      const source = normalizeSource(requestedSource);
+      const cacheKey = getConversationCacheKey(source, filePath);
       // Check cache first
-      const cached = getFromCache(filePath);
+      const cached = getFromCache(source, filePath);
       if (cached) {
-        return { success: true, messages: cached.messages, projectDir: cached.projectDir, fromCache: true };
+        return {
+          success: true,
+          source,
+          messages: cached.messages,
+          projectDir: cached.projectDir,
+          fromCache: true
+        };
       }
 
       // If there's already a pending request for this file, await it
-      if (pendingRequests.has(filePath)) {
-        return pendingRequests.get(filePath);
+      if (pendingRequests.has(cacheKey)) {
+        return pendingRequests.get(cacheKey);
       }
 
       // Create the parsing promise
       const parsePromise = (async () => {
-        const messages = [];
-        let projectDir = null;
-        await parseStream(filePath, (raw) => {
-          // Extract cwd from first user message
-          if (!projectDir && raw.type === 'user' && raw.cwd) {
-            projectDir = raw.cwd;
-          }
-          const parsed = parseMessage(raw);
-          messages.push(parsed);
-        });
-        const data = { messages, projectDir };
-        addToCache(filePath, data);
-        return { success: true, messages, projectDir, fromCache: false };
+        const data = await loadConversationFile(filePath, source);
+        addToCache(source, filePath, data);
+        return {
+          success: true,
+          source,
+          messages: data.messages,
+          projectDir: data.projectDir,
+          fromCache: false
+        };
       })();
 
-      pendingRequests.set(filePath, parsePromise);
+      pendingRequests.set(cacheKey, parsePromise);
       try {
         return await parsePromise;
       } finally {
-        pendingRequests.delete(filePath);
+        pendingRequests.delete(cacheKey);
       }
     } catch (err) {
       console.error('[ipc-handlers] load-conversation error:', err);
@@ -410,7 +437,7 @@ function registerIpcHandlers() {
         fs.unlinkSync(filePath);
       }
       // Remove from in-memory cache
-      conversationCache.delete(filePath);
+      conversationCache.delete(getConversationCacheKey('claude', filePath));
       // Remove from SQLite
       const store = getStore();
       store.deleteConversation(filePath);
@@ -451,7 +478,7 @@ function registerIpcHandlers() {
 
       // Clear cached conversations for this project
       for (const key of conversationCache.keys()) {
-        if (key.startsWith(projectPath + path.sep)) {
+        if (key.startsWith(`claude:${projectPath}${path.sep}`)) {
           conversationCache.delete(key);
         }
       }
@@ -568,27 +595,24 @@ function registerIpcHandlers() {
   ipcMain.handle('export-conversation', async (_, data) => {
     try {
       const { filePath, title, updatedAt } = data || {};
+      const source = normalizeSource(data?.source);
 
       // Resolve messages: prefer the LRU cache used by load-conversation,
-      // otherwise re-parse the jsonl on the fly. projectDir is recovered from
-      // the first user message's cwd, matching load-conversation.
+      // otherwise use the same validated, source-aware loader as the detail view.
       let messages = null;
       let projectDir = null;
-      const cached = filePath ? getFromCache(filePath) : null;
+      const cached = filePath ? getFromCache(source, filePath) : null;
       if (cached) {
         messages = cached.messages;
         projectDir = cached.projectDir;
       } else if (filePath) {
-        messages = [];
-        await parseStream(filePath, (raw) => {
-          if (!projectDir && raw.type === 'user' && raw.cwd) {
-            projectDir = raw.cwd;
-          }
-          messages.push(parseMessage(raw));
-        });
+        const loaded = await loadConversationFile(filePath, source);
+        messages = loaded.messages;
+        projectDir = loaded.projectDir;
       }
 
       const markdown = conversationToMarkdown({
+        source,
         messages: messages || [],
         title,
         projectDir,

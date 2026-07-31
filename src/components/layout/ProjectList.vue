@@ -1,5 +1,24 @@
 <template>
   <div class="project-list">
+    <div class="source-switch" aria-label="会话来源">
+      <button
+        type="button"
+        :class="['source-option', { active: source === 'claude' }]"
+        :aria-pressed="source === 'claude'"
+        @click="$emit('source-change', 'claude')"
+      >
+        Claude Code
+      </button>
+      <button
+        type="button"
+        :class="['source-option', { active: source === 'codex' }]"
+        :aria-pressed="source === 'codex'"
+        @click="$emit('source-change', 'codex')"
+      >
+        Codex
+      </button>
+    </div>
+
     <div class="project-list-header">
       <div class="header-title">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -32,7 +51,7 @@
       </div>
 
       <div v-else-if="!projects || projects.length === 0" class="empty-state">
-        <p>暂无项目</p>
+        <p>{{ source === 'codex' ? '暂无 Codex 会话' : '暂无项目' }}</p>
       </div>
 
       <ul v-else class="project-items">
@@ -51,7 +70,12 @@
           </div>
           <div class="project-actions">
             <span class="project-count">{{ project.conversations?.length || 0 }}</span>
-            <button class="delete-btn" @click.stop="confirmDelete(project)" title="删除">
+            <button
+              v-if="source === 'claude'"
+              class="delete-btn"
+              @click.stop="confirmDelete(project)"
+              title="删除"
+            >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="3 6 5 6 21 6"/>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
@@ -63,6 +87,7 @@
     </div>
 
     <ConfirmDialog
+      v-if="source === 'claude'"
       :show="showDeleteConfirm"
       title="删除项目"
       :message="pendingDelete ? '确定要删除 ' + pendingDelete.displayName + ' 吗？' : ''"
@@ -79,13 +104,18 @@ import SkeletonLoader from '../common/SkeletonLoader.vue';
 import ConfirmDialog from '../common/ConfirmDialog.vue';
 
 const props = defineProps({
-  projects: Array,
-  selectedId: [String, Number],
-  loading: Boolean,
-  error: String
+  projects: { type: Array, default: () => [] },
+  selectedId: { type: [String, Number], default: null },
+  source: {
+    type: String,
+    default: 'claude',
+    validator: (value) => ['claude', 'codex'].includes(value)
+  },
+  loading: { type: Boolean, default: false },
+  error: { type: String, default: null }
 });
 
-const emit = defineEmits(['select', 'refresh', 'delete']);
+const emit = defineEmits(['select', 'source-change', 'refresh', 'delete']);
 
 const showDeleteConfirm = ref(false);
 const pendingDelete = ref(null);
@@ -187,6 +217,41 @@ function formatRelativeTime(timestamp) {
   height: 100%;
   width: 100%;
   background: transparent;
+}
+
+.source-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  margin: 10px 10px 2px;
+  padding: 3px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-control);
+}
+
+.source-option {
+  min-width: 0;
+  padding: 6px 8px;
+  border: none;
+  border-radius: calc(var(--radius-control) - 2px);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.source-option:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.source-option.active {
+  color: var(--surface-selected-text);
+  background: var(--surface-selected);
 }
 
 .project-list-header {

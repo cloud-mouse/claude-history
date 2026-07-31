@@ -105,6 +105,23 @@ describe('conversation-export', () => {
       expect(md.match(/## 🤖 Claude/g).length).toBe(1);
     });
 
+    test('uses the Codex assistant label without changing the app export note', () => {
+      const md = conversationToMarkdown({
+        source: 'codex',
+        messages: [
+          {
+            role: 'assistant',
+            type: 'assistant',
+            blocks: [{ type: 'text', text: 'Codex answer' }],
+          },
+        ],
+      });
+
+      expect(md).toContain('## 🤖 Codex');
+      expect(md).toContain('由 Claude History 导出');
+      expect(md).not.toContain('## 🤖 Claude');
+    });
+
     test('omits thinking blocks entirely', () => {
       const md = conversationToMarkdown({
         messages: [

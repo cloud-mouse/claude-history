@@ -119,6 +119,10 @@ const props = defineProps({
     type: String,
     default: null
   },
+  agentLabel: {
+    type: String,
+    default: 'Claude'
+  },
   messageId: {
     type: String,
     default: null
@@ -159,7 +163,7 @@ const normalizedBlocks = computed(() => {
 const hasVisibleContent = computed(() => normalizedBlocks.value.length > 0);
 
 const roleLabel = computed(() => {
-  return props.role === 'user' ? '用户' : 'Claude';
+  return props.role === 'user' ? '用户' : props.agentLabel;
 });
 
 const formattedTime = computed(() => {

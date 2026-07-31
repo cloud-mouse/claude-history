@@ -13,6 +13,7 @@
         <div class="thread-header-right">
           <div class="thread-title-row">
             <h2>{{ cleanTitle(conversation.title) || '未命名对话' }}</h2>
+            <span v-if="conversation.archived" class="archive-badge">已归档</span>
             <span class="message-count">{{ messageCount }} 条消息</span>
           </div>
           <span class="conversation-date">{{ conversationTime }}</span>
@@ -46,6 +47,7 @@
               :role="message.role === 'tool_result' ? 'assistant' : message.role"
               :timestamp="message.timestamp"
               :source="remoteBot && message.role === 'user' ? 'feishu' : null"
+              :agent-label="assistantLabel"
               :message-id="message.id"
               :ref="el => setBubbleRef(index, el)"
             />
@@ -62,6 +64,7 @@
               v-else-if="message.type === 'last-prompt'"
               :blocks="normalizeContent(message.message?.content)"
               role="user"
+              :agent-label="assistantLabel"
               :message-id="message.id"
               :ref="el => setBubbleRef(index, el)"
             />
@@ -92,8 +95,8 @@ import { useFeishuStore } from '../../stores/feishu';
 import { resolveProjectDir } from '../../utils/project-path.js';
 
 const props = defineProps({
-  conversation: Object,
-  loading: Boolean,
+  conversation: { type: Object, default: null },
+  loading: { type: Boolean, default: false },
   skippedCount: {
     type: Number,
     default: 0
@@ -112,6 +115,9 @@ const showBackToTop = ref(false);
 // encoded projects-folder name only when no cwd was recorded. Drives the
 // "open with tool" dropdown trigger via :project-dir.
 const projectDir = computed(() => resolveProjectDir(props.conversation));
+const assistantLabel = computed(() =>
+  props.conversation?.source === 'codex' ? 'Codex' : 'Claude'
+);
 
 // Format conversation time
 const conversationTime = computed(() => {
@@ -163,7 +169,7 @@ const messageCount = computed(() => {
 // this jsonl bound. Drives the compact "<bot> 活跃/空闲" capsule (only shown for
 // bound conversations). Includes the bot's runtime processing flag.
 const remoteBot = computed(() => {
-  if (!props.conversation?.filePath) return null;
+  if (!props.conversation?.filePath || props.conversation.source === 'codex') return null;
   const bot = feishuStore.bots.find((b) => b.binding?.jsonlPath === props.conversation.filePath);
   if (!bot) return null;
   return { id: bot.id, name: bot.name, processing: !!bot.processing };
@@ -255,6 +261,7 @@ async function exportMarkdown() {
       filePath: props.conversation.filePath,
       title: props.conversation.title,
       updatedAt: props.conversation.updatedAt,
+      source: props.conversation.source || 'claude',
     });
     if (result?.canceled) {
       exportLabel.value = '已取消';
@@ -354,6 +361,17 @@ async function exportMarkdown() {
   padding: 4px 8px;
   border-radius: var(--radius-full);
   flex-shrink: 0;
+}
+
+.archive-badge {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
 }
 
 .expand-btn {

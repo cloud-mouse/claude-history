@@ -30,6 +30,8 @@ export function decodeProjectDirName(encoded) {
  */
 export function resolveProjectDir(conversation) {
   if (conversation?.projectDir) return conversation.projectDir;
+  // Codex session folders are date-based, not encoded working directories.
+  if (conversation?.source === 'codex') return null;
   const filePath = conversation?.filePath;
   if (!filePath) return null;
   // Parent folder of <sessionId>.jsonl is the encoded cwd.

@@ -23,6 +23,7 @@
               :title="`已被机器人「${boundBotName(conv.filePath)}」绑定`"
             ></span>
             <span class="conv-title">{{ cleanTitle(titleMap[conv.filePath] || conv.title) || '未命名' }}</span>
+            <span v-if="conv.archived" class="archive-tag">已归档</span>
             <span v-if="boundBotName(conv.filePath)" class="feishu-bot-tag" :title="`绑定到：${boundBotName(conv.filePath)}`">
               {{ boundBotName(conv.filePath) }}
             </span>
@@ -31,6 +32,7 @@
           <div class="conv-footer">
             <span class="conv-date">{{ formatDate(conv.updatedAt) }}</span>
             <DropdownMenu
+              v-if="source === 'claude'"
               :items="menuItems(conv)"
               trigger-title="会话操作"
               @select="(key) => onMenuSelect(conv, key)"
@@ -106,8 +108,13 @@ const conversationsStore = useConversationsStore();
 const titleMap = conversationsStore.titleMap;
 
 const props = defineProps({
-  conversations: Array,
-  selectedId: String
+  conversations: { type: Array, default: () => [] },
+  selectedId: { type: String, default: null },
+  source: {
+    type: String,
+    default: 'claude',
+    validator: (value) => ['claude', 'codex'].includes(value)
+  }
 });
 
 const emit = defineEmits(['select', 'search', 'delete']);
@@ -133,12 +140,14 @@ function onSelect(conv) {
  * @returns {string} bot name when bound, '' otherwise.
  */
 function boundBotName(jsonlPath) {
+  if (props.source !== 'claude') return '';
   return feishuStore.boundBotFor(jsonlPath)?.name || '';
 }
 
 // --- Per-conversation context menu (4 actions) ---
 
 function menuItems(conv) {
+  if (props.source !== 'claude') return [];
   const bound = !!boundBotName(conv.filePath);
   return [
     {
@@ -155,6 +164,7 @@ function menuItems(conv) {
 }
 
 async function onMenuSelect(conv, key) {
+  if (props.source !== 'claude') return;
   if (key === 'bind') {
     openBindPicker(conv);
   } else if (key === 'unbind') {
@@ -355,6 +365,17 @@ function formatDate(timestamp) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.archive-tag {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
 }
 
 .conversation-item.active .feishu-bot-tag {

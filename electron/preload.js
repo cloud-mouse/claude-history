@@ -4,11 +4,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // OS platform, exposed so the renderer can apply platform-specific CSS
   // (e.g. macOS vibrancy). Set on <html> from main.js once DOM is ready.
   platform: process.platform,
-  scanProjects: () => ipcRenderer.invoke('scan-projects'),
+  scanProjects: (source) => ipcRenderer.invoke('scan-projects', source),
   clearCache: () => ipcRenderer.invoke('clear-cache'),
-  invalidateConversationCache: (filePath) => ipcRenderer.invoke('invalidate-conversation-cache', filePath),
+  invalidateConversationCache: (filePath, source) => ipcRenderer.invoke('invalidate-conversation-cache', filePath, source),
   getConversations: (projectId) => ipcRenderer.invoke('get-conversations', projectId),
-  loadConversation: (filePath) => ipcRenderer.invoke('load-conversation', filePath),
+  loadConversation: (filePath, source) => ipcRenderer.invoke('load-conversation', filePath, source),
   refreshIndex: (filePath) => ipcRenderer.invoke('refresh-index', filePath),
   searchConversations: (projectId, query) => ipcRenderer.invoke('search-conversations', projectId, query),
   searchFulltext: (query, projectId) => ipcRenderer.invoke('search-fulltext', query, projectId),

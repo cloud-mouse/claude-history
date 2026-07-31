@@ -1,6 +1,6 @@
 # Claude History
 
-一款用于浏览和管理本地 Claude Code 对话历史的桌面应用，同时支持通过多个飞书机器人远程交互。
+一款以本地 Claude Code 对话历史浏览和管理为核心的桌面应用，同时附带 Codex 历史会话只读查看，并支持通过多个飞书机器人远程交互 Claude Code。
 
 ## 更新日志
 
@@ -9,6 +9,7 @@
 ## 功能特性
 
 - **三栏可折叠布局**：项目列表 → 对话列表 → 消息详情，左右面板支持一键收起/展开，支持拖拽调整面板宽度
+- **附带 Codex 历史查看**：可从左栏切换来源，查看普通及归档 Codex 会话、工具调用和图片；启动时仍默认使用 Claude Code
 - **优雅的对话展示**：支持 Markdown 渲染、代码高亮、表格样式、图片点击放大预览
 - **全文搜索**：跨对话内容的关键词检索，快速定位
 - **主题切换**：支持简约白 / 深邃黑 / 暖色调 / Monokai 四种主题
@@ -124,9 +125,12 @@ claude-history/
 │   ├── feishu-ipc.js            # 飞书机器人 IPC 处理器（增删改查、绑定）
 │   ├── feishu-hook-script.js    # Claude Code PreToolUse hook 脚本
 │   ├── store.js                 # SQLite 数据库（feishu_bots / feishu_bindings、凭证加密）
-│   ├── file-scanner.js          # 扫描 ~/.claude/projects 目录
+│   ├── file-scanner.js          # 扫描 Claude Code / Codex 会话目录
 │   ├── jsonl-parser.js          # 流式 JSONL 解析器
 │   ├── message-parser.js        # 消息解析与结构化
+│   ├── codex-parser.js          # Codex 记录过滤与消息归一化
+│   ├── conversation-loader.js   # 来源感知的统一会话加载器
+│   ├── conversation-source.js   # 来源枚举、数据目录和路径边界
 │   ├── markdown.js              # Markdown 渲染（主进程端）
 │   ├── title-extractor.js       # 标题提取工具
 │   ├── project-opener.js        # 以外部工具（Cursor/VS Code/终端）打开项目
@@ -222,9 +226,14 @@ claude-history/
 
 ## 数据来源
 
-应用读取 `~/.claude/projects/` 目录下的 Claude Code 对话记录文件（`.jsonl` 格式）。
+应用启动时默认读取 `~/.claude/projects/` 下的 Claude Code 对话记录。左栏切换到 Codex 后，会只读扫描：
 
-数据流：`磁盘文件` → `file-scanner 扫描` → `SQLite 缓存` → `Pinia Store` → `Vue 组件渲染`
+- `$CODEX_HOME/sessions/` 与 `$CODEX_HOME/archived_sessions/`（设置了 `CODEX_HOME` 时）
+- `~/.codex/sessions/` 与 `~/.codex/archived_sessions/`（默认）
+
+Codex 会话不会写入现有 SQLite；应用会过滤子代理/派生会话及 developer、system、reasoning 等内部记录，仅在内存中生成项目、会话和消息视图。
+
+Codex 当前支持项目与会话列表、标题筛选、消息详情、归档标识、Markdown 导出和打开项目目录。全文搜索、统计、恢复、删除及飞书绑定仍是 Claude Code 专属功能。
 
 ## 飞书桥连
 
@@ -252,6 +261,7 @@ claude-history/
 
 | 功能 | 操作 |
 |------|------|
+| 切换会话来源 | 在左栏顶部选择「Claude Code」或「Codex」；每次启动默认 Claude Code |
 | 面板折叠/展开 | 点击面板分隔线旁的箭头按钮 |
 | 调整面板宽度 | 拖拽面板之间的分隔线 |
 | 全文搜索 | 在工具栏搜索框输入关键词 |

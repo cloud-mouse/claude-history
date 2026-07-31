@@ -3,6 +3,12 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { extractTitle } = require('./title-extractor');
+const {
+  parseCodexSessionMeta,
+  extractCodexUserText,
+} = require('./codex-parser');
+const { getCodexHomeDir } = require('./conversation-source');
 
 function getHomeDir() {
   return process.env.HOME || process.env.USERPROFILE || os.homedir();
@@ -119,4 +125,111 @@ async function scanConversations(projectPath) {
   return conversations;
 }
 
-module.exports = { scanProjects, scanConversations, PROJECTS_DIR };
+function collectJsonlFiles(rootDir) {
+  const files = [];
+  if (!fs.existsSync(rootDir)) return files;
+  for (const entry of fs.readdirSync(rootDir, { withFileTypes: true })) {
+    const entryPath = path.join(rootDir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...collectJsonlFiles(entryPath));
+    } else if (entry.isFile() && entry.name.endsWith('.jsonl')) {
+      files.push(entryPath);
+    }
+  }
+  return files;
+}
+
+function readCodexConversationMetadata(filePath) {
+  return new Promise((resolve) => {
+    let metadata = null;
+    let firstUserText = null;
+    const stream = fs.createReadStream(filePath, { encoding: 'utf8', highWaterMark: 64 * 1024 });
+    const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+
+    rl.on('line', (line) => {
+      if (!line.trim()) return;
+      try {
+        const raw = JSON.parse(line);
+        if (!metadata) metadata = parseCodexSessionMeta(raw);
+        if (!firstUserText) firstUserText = extractCodexUserText(raw);
+        if (metadata && firstUserText) rl.close();
+      } catch (err) {
+        console.warn(`[file-scanner] Skipped malformed Codex line in ${filePath}: ${err.message}`);
+      }
+    });
+    rl.on('close', () => resolve(metadata ? { ...metadata, firstUserText } : null));
+    rl.on('error', () => resolve(metadata ? { ...metadata, firstUserText } : null));
+  });
+}
+
+function codexProjectName(projectDir) {
+  if (!projectDir) return '未归类';
+  const normalized = projectDir.replace(/[\\/]+$/, '');
+  return path.basename(normalized) || projectDir;
+}
+
+/**
+ * Scan Codex active and archived sessions without persisting them to SQLite.
+ * @param {string} [codexHome]
+ * @returns {Promise<Array>}
+ */
+async function scanCodexProjects(codexHome = getCodexHomeDir()) {
+  const activeRoot = path.join(codexHome, 'sessions');
+  const archivedRoot = path.join(codexHome, 'archived_sessions');
+  const candidates = [
+    ...collectJsonlFiles(activeRoot).map((filePath) => ({ filePath, archived: false })),
+    ...collectJsonlFiles(archivedRoot).map((filePath) => ({ filePath, archived: true })),
+  ];
+  const seenSessionIds = new Set();
+  const projectsByDir = new Map();
+
+  for (const candidate of candidates) {
+    try {
+      const metadata = await readCodexConversationMetadata(candidate.filePath);
+      if (!metadata) {
+        console.warn(`[file-scanner] Missing Codex session metadata: ${candidate.filePath}`);
+        continue;
+      }
+      if (metadata.internal) continue;
+
+      const fallbackId = path.basename(candidate.filePath, '.jsonl');
+      const sessionId = metadata.sessionId || fallbackId;
+      if (seenSessionIds.has(sessionId)) continue;
+      seenSessionIds.add(sessionId);
+
+      const stats = fs.statSync(candidate.filePath);
+      const projectDir = metadata.projectDir || null;
+      const projectKey = projectDir || 'uncategorized';
+      if (!projectsByDir.has(projectKey)) {
+        projectsByDir.set(projectKey, {
+          id: projectDir ? `codex:${projectDir}` : 'codex:uncategorized',
+          source: 'codex',
+          name: codexProjectName(projectDir),
+          path: projectDir || '',
+          conversations: [],
+        });
+      }
+      projectsByDir.get(projectKey).conversations.push({
+        id: `codex:${sessionId}`,
+        source: 'codex',
+        sessionId,
+        filePath: candidate.filePath,
+        fileSize: stats.size,
+        updatedAt: stats.mtimeMs,
+        title: extractTitle(metadata.firstUserText),
+        projectDir,
+        archived: candidate.archived,
+      });
+    } catch (err) {
+      console.warn(`[file-scanner] Failed to scan Codex session ${candidate.filePath}: ${err.message}`);
+    }
+  }
+
+  const projects = Array.from(projectsByDir.values());
+  for (const project of projects) {
+    project.conversations.sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+  return projects;
+}
+
+module.exports = { scanProjects, scanConversations, scanCodexProjects, PROJECTS_DIR };

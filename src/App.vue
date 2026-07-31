@@ -13,15 +13,22 @@
           <ProjectList
             :projects="projectsStore.projects"
             :selectedId="projectsStore.selectedProjectId"
+            :source="projectsStore.activeSource"
             :loading="projectsStore.loading"
             :error="projectsStore.error"
             @select="handleProjectSelect"
+            @source-change="handleSourceChange"
             @refresh="handleRefresh"
             @delete="handleProjectDelete"
           />
         </div>
         <div class="app-toolbar">
-          <button class="settings-btn" @click="showSearch = true" title="全文搜索 (Ctrl/Cmd+Shift+F)">
+          <button
+            v-if="projectsStore.activeSource === 'claude'"
+            class="settings-btn"
+            @click="showSearch = true"
+            title="全文搜索 (Ctrl/Cmd+Shift+F)"
+          >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="8"></circle>
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
@@ -66,6 +73,7 @@
         <ConversationList
           :conversations="currentConversations"
           :selectedId="conversationsStore.activeConversation?.filePath"
+          :source="projectsStore.activeSource"
           @select="handleConversationSelect"
           @delete="handleConversationDelete"
         />
@@ -149,6 +157,20 @@ function handleConversationSelect(conv) {
   conversationsStore.openConversation(conv);
 }
 
+async function handleSourceChange(source) {
+  if (source === projectsStore.activeSource) return;
+  showSearch.value = false;
+  conversationsStore.clearActive();
+  conversationsStore.clearCache();
+  const [, cacheResult] = await Promise.all([
+    projectsStore.switchSource(source),
+    window.electronAPI.clearCache()
+  ]);
+  if (!cacheResult?.success) {
+    console.error('[App] Failed to clear conversation cache:', cacheResult?.error);
+  }
+}
+
 // Open the settings modal, optionally deep-linking to a specific tab.
 function openSettings(tab = 'feishu') {
   settingsInitialTab.value = tab;
@@ -167,10 +189,11 @@ async function handleRefresh() {
   conversationsStore.clearActive();
   conversationsStore.clearCache();
   await window.electronAPI.clearCache();
-  projectsStore.loadProjects();
+  await projectsStore.loadProjects();
 }
 
 function handleProjectDelete(projectId) {
+  if (projectsStore.activeSource !== 'claude') return;
   window.electronAPI.deleteProject(projectId).then(() => {
     const index = projectsStore.projects.findIndex(p => p.id === projectId);
     if (index !== -1) {
@@ -181,6 +204,7 @@ function handleProjectDelete(projectId) {
 }
 
 function handleConversationDelete(filePath) {
+  if (projectsStore.activeSource !== 'claude') return;
   window.electronAPI.deleteConversation(filePath).then(() => {
     const currentProject = projectsStore.selectedProject;
     if (currentProject && currentProject.conversations) {
@@ -247,7 +271,8 @@ onMounted(() => {
   _unsubs.push(
     window.electronAPI.onFeishuJsonlChanged((data) => {
       // Debounce reload of active conversation
-      if (conversationsStore.activeConversation?.filePath === data.jsonlPath) {
+      if (projectsStore.activeSource === 'claude'
+        && conversationsStore.activeConversation?.filePath === data.jsonlPath) {
         clearTimeout(_reloadDebounce);
         _reloadDebounce = setTimeout(async () => {
           await conversationsStore.reloadByFilePath(data.jsonlPath);
@@ -259,7 +284,7 @@ onMounted(() => {
       clearTimeout(_jsonlDebounce);
       _jsonlDebounce = setTimeout(() => {
         const selectedProject = projectsStore.selectedProject;
-        if (selectedProject) {
+        if (projectsStore.activeSource === 'claude' && selectedProject) {
           projectsStore.refreshConversations(selectedProject.id);
         }
       }, 1000);
@@ -288,7 +313,9 @@ onMounted(() => {
   const onKeydown = (e) => {
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'f' || e.key === 'F')) {
       e.preventDefault();
-      showSearch.value = true;
+      if (projectsStore.activeSource === 'claude') {
+        showSearch.value = true;
+      }
     }
   };
   window.addEventListener('keydown', onKeydown);
