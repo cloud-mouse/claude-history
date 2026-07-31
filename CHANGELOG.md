@@ -17,6 +17,18 @@
 
 ---
 
+## [1.8.0] — 2026-07-31
+
+### 🆕 新增
+
+- **Codex 历史会话查看**：在保留 Claude History 品牌与默认 Claude 数据源的前提下，新增 Claude / Codex 数据源切换。可只读浏览 `$CODEX_HOME` 或 `~/.codex` 中的活跃及已归档会话，查看用户消息、助手回复、工具调用、工具结果与图片，并支持 Markdown 导出和打开项目目录。
+
+### 🎨 改进
+
+- **数据源安全隔离**：Codex 会话不写入现有 Claude SQLite 索引，并隐藏删除、恢复、全文搜索和飞书等写操作；自动过滤子代理会话、系统上下文、开发者指令和推理内容。
+
+---
+
 ## [1.7.0] — 2026-07-17
 
 ### 🆕 新增
@@ -199,7 +211,8 @@
 
 ---
 
-[Unreleased]: https://github.com/cloud-mouse/claude-history/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/cloud-mouse/claude-history/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/cloud-mouse/claude-history/releases/tag/v1.8.0
 [1.7.0]: https://github.com/cloud-mouse/claude-history/releases/tag/v1.7.0
 [1.6.0]: https://github.com/cloud-mouse/claude-history/releases/tag/v1.6.0
 [1.5.2]: https://github.com/cloud-mouse/claude-history/releases/tag/v1.5.2
