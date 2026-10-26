@@ -109,6 +109,9 @@ function parseMessage(raw) {
   };
 
   // Add type-specific fields
+  // Skill expansions are user-role context, not text authored by the user.
+  if (raw.isMeta === true) result.isMeta = true;
+
   if (type === 'permission-mode') {
     result.permissionMode = raw.permissionMode || null;
     result.granted = raw.granted !== false; // default to true

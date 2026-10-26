@@ -1,12 +1,32 @@
 <template>
-  <div v-if="hasVisibleContent" :id="messageId ? 'msg-' + messageId : undefined" :class="['chat-bubble', role]">
+  <div
+    v-if="hasVisibleContent"
+    :id="messageId ? 'msg-' + messageId : undefined"
+    :class="['chat-bubble', role, { 'work-output': !hasDialogueContent }]"
+  >
     <div class="bubble-header">
       <span class="avatar">
-        <svg v-if="role === 'user'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg
+          v-if="role === 'user'"
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
           <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
           <circle cx="12" cy="7" r="4"></circle>
         </svg>
-        <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg
+          v-else
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
           <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
           <path d="M2 17l10 5 10-5"></path>
           <path d="M2 12l10 5 10-5"></path>
@@ -18,21 +38,42 @@
     </div>
     <div class="bubble-content">
       <template v-for="(block, i) in normalizedBlocks" :key="i">
-        <div v-if="block.type === 'text'" class="text-block">
+        <div
+          v-if="block.type === 'text'"
+          class="text-block"
+          :class="{ 'work-output': !!block.command && role !== 'user' }"
+        >
           <div v-if="block.command" class="command-wrapper">
-            <CommandBlock
-              :command="block.command"
-              :body="block.body"
-            />
-            <div v-if="block.body && block.body.trim()" v-html="block.renderedHtml" class="markdown-content command-body"></div>
+            <CommandBlock :command="block.command" :body="block.body" />
+            <div
+              v-if="block.body && block.body.trim()"
+              v-html="block.renderedHtml"
+              class="markdown-content command-body work-output"
+            ></div>
           </div>
           <div v-else class="text-content">
             <button class="copy-md-btn" @click="copyText(block, $event)" title="复制内容">
-              <svg v-if="copiedIndex !== i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <svg
+                v-if="copiedIndex !== i"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
               </svg>
-              <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <svg
+                v-else
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
                 <polyline points="20 6 9 17 4 12"></polyline>
               </svg>
             </button>
@@ -40,9 +81,21 @@
           </div>
         </div>
         <div v-else-if="block.type === 'image'" class="image-block">
-          <img v-if="block.imageUrl" :src="block.imageUrl" class="attached-image" @click="previewImage(block.imageUrl)" />
+          <img
+            v-if="block.imageUrl"
+            :src="block.imageUrl"
+            class="attached-image"
+            @click="previewImage(block.imageUrl)"
+          />
           <span v-else class="image-placeholder">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
               <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
               <circle cx="8.5" cy="8.5" r="1.5"></circle>
               <polyline points="21 15 16 10 5 21"></polyline>
@@ -50,28 +103,124 @@
             图片
           </span>
         </div>
-        <TaskCreateBlock v-if="block.type === 'tool_use' && block.name === 'TaskCreate'" :block="block" :ref="el => setChildRef('taskcreate_' + i, el)" />
-        <TaskUpdateBlock v-else-if="block.type === 'tool_use' && (block.name === 'TaskUpdate' || block.toolName === 'TaskUpdate')" :block="block" :ref="el => setChildRef('taskupdate_' + i, el)" />
-        <AgentToolBlock v-else-if="block.type === 'tool_use' && (block.name === 'Agent' || block.toolName === 'Agent')" :block="block" :ref="el => setChildRef('agent_' + i, el)" />
-        <TodoWriteBlock v-else-if="block.type === 'tool_use' && (block.name === 'TodoWrite' || block.toolName === 'TodoWrite')" :block="block" :ref="el => setChildRef('todo_' + i, el)" />
-        <WriteToolBlock v-else-if="block.type === 'tool_use' && block.name === 'Write'" :block="block" :ref="el => setChildRef('write_' + i, el)" />
-        <EditToolBlock v-else-if="block.type === 'tool_use' && block.name === 'Edit'" :block="block" :ref="el => setChildRef('edit_' + i, el)" />
-        <ReadToolBlock v-else-if="block.type === 'tool_use' && block.name === 'Read'" :block="block" :ref="el => setChildRef('read_' + i, el)" />
-        <GlobToolBlock v-else-if="block.type === 'tool_use' && block.name === 'Glob'" :block="block" :ref="el => setChildRef('glob_' + i, el)" />
-        <GrepToolBlock v-else-if="block.type === 'tool_use' && block.name === 'Grep'" :block="block" :ref="el => setChildRef('grep_' + i, el)" />
-        <AskUserQuestionBlock v-else-if="block.type === 'tool_use' && (block.name === 'AskUserQuestion' || block.toolName === 'AskUserQuestion')" :block="block" :ref="el => setChildRef('ask_' + i, el)" />
-        <TaskOutputBlock v-else-if="block.type === 'tool_use' && (block.name === 'TaskOutput' || block.toolName === 'TaskOutput')" :block="block" :ref="el => setChildRef('taskoutput_' + i, el)" />
-        <ToolCall v-else-if="block.type === 'tool_use'" :block="block" :ref="el => setChildRef('tool_' + i, el)" />
-        <ToolResult v-else-if="block.type === 'tool_result'" :block="block" :ref="el => setChildRef('result_' + i, el)" />
-        <ThinkingBlock v-else-if="block.type === 'thinking'" :block="block" :ref="el => setChildRef('thinking_' + i, el)" />
+        <TaskCreateBlock
+          class="work-output"
+          v-if="block.type === 'tool_use' && block.name === 'TaskCreate'"
+          :block="block"
+          :ref="(el) => setChildRef('taskcreate_' + i, el)"
+        />
+        <TaskUpdateBlock
+          class="work-output"
+          v-else-if="
+            block.type === 'tool_use' &&
+            (block.name === 'TaskUpdate' || block.toolName === 'TaskUpdate')
+          "
+          :block="block"
+          :ref="(el) => setChildRef('taskupdate_' + i, el)"
+        />
+        <AgentToolBlock
+          class="work-output"
+          v-else-if="
+            block.type === 'tool_use' && (block.name === 'Agent' || block.toolName === 'Agent')
+          "
+          :block="block"
+          :ref="(el) => setChildRef('agent_' + i, el)"
+        />
+        <TodoWriteBlock
+          class="work-output"
+          v-else-if="
+            block.type === 'tool_use' &&
+            (block.name === 'TodoWrite' || block.toolName === 'TodoWrite')
+          "
+          :block="block"
+          :ref="(el) => setChildRef('todo_' + i, el)"
+        />
+        <WriteToolBlock
+          class="work-output"
+          v-else-if="block.type === 'tool_use' && block.name === 'Write'"
+          :block="block"
+          :ref="(el) => setChildRef('write_' + i, el)"
+        />
+        <EditToolBlock
+          class="work-output"
+          v-else-if="block.type === 'tool_use' && block.name === 'Edit'"
+          :block="block"
+          :ref="(el) => setChildRef('edit_' + i, el)"
+        />
+        <ReadToolBlock
+          class="work-output"
+          v-else-if="block.type === 'tool_use' && block.name === 'Read'"
+          :block="block"
+          :ref="(el) => setChildRef('read_' + i, el)"
+        />
+        <GlobToolBlock
+          class="work-output"
+          v-else-if="block.type === 'tool_use' && block.name === 'Glob'"
+          :block="block"
+          :ref="(el) => setChildRef('glob_' + i, el)"
+        />
+        <GrepToolBlock
+          class="work-output"
+          v-else-if="block.type === 'tool_use' && block.name === 'Grep'"
+          :block="block"
+          :ref="(el) => setChildRef('grep_' + i, el)"
+        />
+        <AskUserQuestionBlock
+          class="work-output"
+          v-else-if="
+            block.type === 'tool_use' &&
+            (block.name === 'AskUserQuestion' || block.toolName === 'AskUserQuestion')
+          "
+          :block="block"
+          :ref="(el) => setChildRef('ask_' + i, el)"
+        />
+        <TaskOutputBlock
+          class="work-output"
+          v-else-if="
+            block.type === 'tool_use' &&
+            (block.name === 'TaskOutput' || block.toolName === 'TaskOutput')
+          "
+          :block="block"
+          :ref="(el) => setChildRef('taskoutput_' + i, el)"
+        />
+        <ToolCall
+          class="work-output"
+          v-else-if="block.type === 'tool_use'"
+          :block="block"
+          :ref="(el) => setChildRef('tool_' + i, el)"
+        />
+        <ToolResult
+          class="work-output"
+          v-else-if="block.type === 'tool_result'"
+          :block="block"
+          :ref="(el) => setChildRef('result_' + i, el)"
+        />
+        <ThinkingBlock
+          class="work-output"
+          v-else-if="block.type === 'thinking'"
+          :block="block"
+          :ref="(el) => setChildRef('thinking_' + i, el)"
+        />
       </template>
     </div>
     <Teleport to="body">
       <transition name="lightbox">
-        <div v-if="previewUrl" class="image-lightbox" @click="closePreview" @keydown.escape="closePreview">
+        <div
+          v-if="previewUrl"
+          class="image-lightbox"
+          @click="closePreview"
+          @keydown.escape="closePreview"
+        >
           <img :src="previewUrl" class="lightbox-image" @click.stop />
           <button class="lightbox-close" @click="closePreview">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
               <line x1="18" y1="6" x2="6" y2="18"></line>
               <line x1="6" y1="6" x2="18" y2="18"></line>
             </svg>
@@ -83,23 +232,23 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
-import { renderMarkdown, parseCommandContent } from '../../utils/markdown.js';
-import ToolCall from '../tools/ToolCall.vue';
-import ToolResult from '../tools/ToolResult.vue';
-import ThinkingBlock from './ThinkingBlock.vue';
-import TaskCreateBlock from '../tools/TaskCreateBlock.vue';
-import CommandBlock from './CommandBlock.vue';
-import WriteToolBlock from '../tools/WriteToolBlock.vue';
-import EditToolBlock from '../tools/EditToolBlock.vue';
-import ReadToolBlock from '../tools/ReadToolBlock.vue';
-import AgentToolBlock from '../tools/AgentToolBlock.vue';
-import TodoWriteBlock from '../tools/TodoWriteBlock.vue';
-import TaskUpdateBlock from '../tools/TaskUpdateBlock.vue';
-import AskUserQuestionBlock from '../tools/AskUserQuestionBlock.vue';
-import TaskOutputBlock from '../tools/TaskOutputBlock.vue';
-import GlobToolBlock from '../tools/GlobToolBlock.vue';
-import GrepToolBlock from '../tools/GrepToolBlock.vue';
+import { computed, ref } from 'vue'
+import { renderMarkdown, parseCommandContent } from '../../utils/markdown.js'
+import ToolCall from '../tools/ToolCall.vue'
+import ToolResult from '../tools/ToolResult.vue'
+import ThinkingBlock from './ThinkingBlock.vue'
+import TaskCreateBlock from '../tools/TaskCreateBlock.vue'
+import CommandBlock from './CommandBlock.vue'
+import WriteToolBlock from '../tools/WriteToolBlock.vue'
+import EditToolBlock from '../tools/EditToolBlock.vue'
+import ReadToolBlock from '../tools/ReadToolBlock.vue'
+import AgentToolBlock from '../tools/AgentToolBlock.vue'
+import TodoWriteBlock from '../tools/TodoWriteBlock.vue'
+import TaskUpdateBlock from '../tools/TaskUpdateBlock.vue'
+import AskUserQuestionBlock from '../tools/AskUserQuestionBlock.vue'
+import TaskOutputBlock from '../tools/TaskOutputBlock.vue'
+import GlobToolBlock from '../tools/GlobToolBlock.vue'
+import GrepToolBlock from '../tools/GrepToolBlock.vue'
 
 const props = defineProps({
   blocks: {
@@ -127,52 +276,65 @@ const props = defineProps({
     type: String,
     default: null
   }
-});
+})
 
-const childRefs = ref({});
+const childRefs = ref({})
 
 const normalizedBlocks = computed(() => {
-  return props.blocks.map((block, index) => {
-    if (block.type === 'text') {
-      const text = block.text || block.content || '';
-      if (typeof text === 'string' && text.trim()) {
-        const { command, body } = parseCommandContent(text);
+  return props.blocks
+    .map((block, index) => {
+      if (block.type === 'text') {
+        const text = block.text || block.content || ''
+        if (typeof text === 'string' && text.trim()) {
+          const { command, body } = parseCommandContent(text)
+          return {
+            ...block,
+            command,
+            body,
+            renderedHtml: renderMarkdown(body)
+          }
+        }
+        return null
+      }
+      if (block.type === 'tool_use' && block.toolName) {
+        return { ...block, name: block.toolName }
+      }
+      if (block.type === 'image') {
+        const source = block.source || {}
         return {
           ...block,
-          command,
-          body,
-          renderedHtml: renderMarkdown(body)
-        };
+          imageUrl:
+            source.url ||
+            (source.data ? `data:${source.media_type || 'image/png'};base64,${source.data}` : null)
+        }
       }
-      return null;
-    }
-    if (block.type === 'tool_use' && block.toolName) {
-      return { ...block, name: block.toolName };
-    }
-    if (block.type === 'image') {
-      const source = block.source || {};
-      return {
-        ...block,
-        imageUrl: source.url || (source.data ? `data:${source.media_type || 'image/png'};base64,${source.data}` : null)
-      };
-    }
-    return block;
-  }).filter(Boolean);
-});
+      return block
+    })
+    .filter(Boolean)
+})
 
-const hasVisibleContent = computed(() => normalizedBlocks.value.length > 0);
+const hasVisibleContent = computed(() => normalizedBlocks.value.length > 0)
+const hasDialogueContent = computed(() =>
+  normalizedBlocks.value.some(
+    (block) =>
+      block.type === 'image' || (block.type === 'text' && (!block.command || props.role === 'user'))
+  )
+)
 
 const roleLabel = computed(() => {
-  return props.role === 'user' ? '用户' : props.agentLabel;
-});
+  return props.role === 'user' ? '用户' : props.agentLabel
+})
 
 const formattedTime = computed(() => {
-  if (!props.timestamp) return '';
-  const ts = typeof props.timestamp === 'number'
-    ? (props.timestamp > 9999999999 ? props.timestamp : props.timestamp * 1000)
-    : new Date(props.timestamp).getTime();
-  const date = new Date(ts);
-  if (isNaN(date.getTime())) return '';
+  if (!props.timestamp) return ''
+  const ts =
+    typeof props.timestamp === 'number'
+      ? props.timestamp > 9999999999
+        ? props.timestamp
+        : props.timestamp * 1000
+      : new Date(props.timestamp).getTime()
+  const date = new Date(ts)
+  if (isNaN(date.getTime())) return ''
   return date.toLocaleString('zh-CN', {
     year: 'numeric',
     month: '2-digit',
@@ -180,59 +342,61 @@ const formattedTime = computed(() => {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit'
-  });
-});
+  })
+})
 
-const previewUrl = ref(null);
-const copiedIndex = ref(-1);
+const previewUrl = ref(null)
+const copiedIndex = ref(-1)
 
 function copyText(block, event) {
-  event.stopPropagation();
-  const text = block.text || block.content || '';
+  event.stopPropagation()
+  const text = block.text || block.content || ''
   navigator.clipboard.writeText(text).then(() => {
-    const idx = normalizedBlocks.value.indexOf(block);
-    copiedIndex.value = idx;
-    setTimeout(() => { copiedIndex.value = -1; }, 2000);
-  });
+    const idx = normalizedBlocks.value.indexOf(block)
+    copiedIndex.value = idx
+    setTimeout(() => {
+      copiedIndex.value = -1
+    }, 2000)
+  })
 }
 
 function previewImage(url) {
-  previewUrl.value = url;
-  document.addEventListener('keydown', onPreviewEscape);
+  previewUrl.value = url
+  document.addEventListener('keydown', onPreviewEscape)
 }
 
 function closePreview() {
-  previewUrl.value = null;
-  document.removeEventListener('keydown', onPreviewEscape);
+  previewUrl.value = null
+  document.removeEventListener('keydown', onPreviewEscape)
 }
 
 function onPreviewEscape(e) {
-  if (e.key === 'Escape') closePreview();
+  if (e.key === 'Escape') closePreview()
 }
 
 function setChildRef(index, el) {
   if (el) {
-    childRefs.value[index] = el;
+    childRefs.value[index] = el
   }
 }
 
 function expandAll() {
-  Object.values(childRefs.value).forEach(child => {
+  Object.values(childRefs.value).forEach((child) => {
     if (child && child.expandAll) {
-      child.expandAll();
+      child.expandAll()
     }
-  });
+  })
 }
 
 function collapseAll() {
-  Object.values(childRefs.value).forEach(child => {
+  Object.values(childRefs.value).forEach((child) => {
     if (child && child.collapseAll) {
-      child.collapseAll();
+      child.collapseAll()
     }
-  });
+  })
 }
 
-defineExpose({ expandAll, collapseAll });
+defineExpose({ expandAll, collapseAll })
 </script>
 
 <style scoped>
@@ -379,9 +543,15 @@ defineExpose({ expandAll, collapseAll });
   font-weight: 600;
 }
 
-.markdown-content :deep(h1) { font-size: 1.3em; }
-.markdown-content :deep(h2) { font-size: 1.15em; }
-.markdown-content :deep(h3) { font-size: 1.05em; }
+.markdown-content :deep(h1) {
+  font-size: 1.3em;
+}
+.markdown-content :deep(h2) {
+  font-size: 1.15em;
+}
+.markdown-content :deep(h3) {
+  font-size: 1.05em;
+}
 
 .markdown-content :deep(p) {
   margin: 0.5em 0;

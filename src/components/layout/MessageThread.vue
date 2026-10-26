@@ -17,13 +17,18 @@
             <span class="message-count">{{ messageCount }} 条消息</span>
           </div>
           <span class="conversation-date">{{ conversationTime }}</span>
-          <span v-if="remoteBot" class="remote-badge" :class="remoteBot.processing ? 'active' : 'idle'">
+          <span
+            v-if="remoteBot"
+            class="remote-badge"
+            :class="remoteBot.processing ? 'active' : 'idle'"
+          >
             <span :class="['status-dot-inline', remoteBot.processing ? 'green' : 'yellow']"></span>
             {{ remoteBot.name }} {{ remoteBot.processing ? '活跃' : '空闲' }}
           </span>
         </div>
         <div class="thread-header-left">
-          <button class="expand-btn" @click="toggleAll">
+          <DialogueOnlyToggle />
+          <button class="expand-btn expand-all-btn" @click="toggleAll">
             {{ allExpanded ? '收起全部' : '展开全部' }}
           </button>
           <button
@@ -42,22 +47,33 @@
         <div class="messages-inner">
           <template v-for="(message, index) in messages" :key="index">
             <ChatBubble
-              v-if="message.role === 'user' || message.role === 'assistant' || message.type === 'tool_result'"
+              v-if="
+                message.role === 'user' ||
+                message.role === 'assistant' ||
+                message.type === 'tool_result'
+              "
+              :class="{ 'work-output': message.type === 'tool_result' || message.isMeta }"
               :blocks="message.blocks || [message]"
               :role="message.role === 'tool_result' ? 'assistant' : message.role"
               :timestamp="message.timestamp"
               :source="remoteBot && message.role === 'user' ? 'feishu' : null"
               :agent-label="assistantLabel"
               :message-id="message.id"
-              :ref="el => setBubbleRef(index, el)"
+              :ref="(el) => setBubbleRef(index, el)"
             />
             <PermissionBadge
               v-else-if="message.type === 'permission-mode'"
+              class="work-output"
               :mode="message.permissionMode"
               :granted="message.granted"
             />
             <FileSnapshot
-              v-else-if="message.type === 'file-history-snapshot' && message.files && message.files.length > 0"
+              v-else-if="
+                message.type === 'file-history-snapshot' &&
+                message.files &&
+                message.files.length > 0
+              "
+              class="work-output"
               :blocks="message"
             />
             <ChatBubble
@@ -66,7 +82,7 @@
               role="user"
               :agent-label="assistantLabel"
               :message-id="message.id"
-              :ref="el => setBubbleRef(index, el)"
+              :ref="(el) => setBubbleRef(index, el)"
             />
           </template>
         </div>
@@ -74,7 +90,14 @@
 
       <transition name="fade">
         <button v-if="showBackToTop" class="back-to-top-btn" @click="scrollToTop" title="回到顶部">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
             <polyline points="18 15 12 9 6 15"></polyline>
           </svg>
         </button>
@@ -84,15 +107,16 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue';
-import { cleanTitle } from '../../utils/title-extractor.js';
-import SkeletonLoader from '../common/SkeletonLoader.vue';
-import ChatBubble from '../chat/ChatBubble.vue';
-import PermissionBadge from '../chat/PermissionBadge.vue';
-import FileSnapshot from '../chat/FileSnapshot.vue';
-import ProjectToolOpener from './ProjectToolOpener.vue';
-import { useFeishuStore } from '../../stores/feishu';
-import { resolveProjectDir } from '../../utils/project-path.js';
+import { ref, computed, watch, nextTick } from 'vue'
+import { cleanTitle } from '../../utils/title-extractor.js'
+import SkeletonLoader from '../common/SkeletonLoader.vue'
+import ChatBubble from '../chat/ChatBubble.vue'
+import DialogueOnlyToggle from '../chat/DialogueOnlyToggle.vue'
+import PermissionBadge from '../chat/PermissionBadge.vue'
+import FileSnapshot from '../chat/FileSnapshot.vue'
+import ProjectToolOpener from './ProjectToolOpener.vue'
+import { useFeishuStore } from '../../stores/feishu'
+import { resolveProjectDir } from '../../utils/project-path.js'
 
 const props = defineProps({
   conversation: { type: Object, default: null },
@@ -101,34 +125,32 @@ const props = defineProps({
     type: Number,
     default: 0
   }
-});
+})
 
-const feishuStore = useFeishuStore();
+const feishuStore = useFeishuStore()
 
-const messagesContainer = ref(null);
-const allExpanded = ref(false);
-const bubbleRefs = ref({});
-const showBackToTop = ref(false);
+const messagesContainer = ref(null)
+const allExpanded = ref(false)
+const bubbleRefs = ref({})
+const showBackToTop = ref(false)
 
 // Real working directory for the active conversation. Preferred source is the cwd
 // recorded in the JSONL (conversation.projectDir); we fall back to decoding the
 // encoded projects-folder name only when no cwd was recorded. Drives the
 // "open with tool" dropdown trigger via :project-dir.
-const projectDir = computed(() => resolveProjectDir(props.conversation));
-const assistantLabel = computed(() =>
-  props.conversation?.source === 'codex' ? 'Codex' : 'Claude'
-);
+const projectDir = computed(() => resolveProjectDir(props.conversation))
+const assistantLabel = computed(() => (props.conversation?.source === 'codex' ? 'Codex' : 'Claude'))
 
 // Format conversation time
 const conversationTime = computed(() => {
-  const timestamp = props.conversation?.updatedAt;
+  const timestamp = props.conversation?.updatedAt
   if (!timestamp || timestamp === 0) {
-    const filePath = props.conversation?.filePath;
+    const filePath = props.conversation?.filePath
     if (filePath) {
-      const match = filePath.match(/(\d{10,13})/);
+      const match = filePath.match(/(\d{10,13})/)
       if (match) {
-        const ts = parseInt(match[1]);
-        const date = new Date(ts > 9999999999 ? ts : ts * 1000);
+        const ts = parseInt(match[1])
+        const date = new Date(ts > 9999999999 ? ts : ts * 1000)
         if (!isNaN(date.getTime())) {
           return date.toLocaleString('zh-CN', {
             year: 'numeric',
@@ -136,146 +158,155 @@ const conversationTime = computed(() => {
             day: '2-digit',
             hour: '2-digit',
             minute: '2-digit'
-          });
+          })
         }
       }
     }
-    return '';
+    return ''
   }
-  const date = new Date(timestamp);
+  const date = new Date(timestamp)
   return date.toLocaleString('zh-CN', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit'
-  });
-});
+  })
+})
 
 const messages = computed(() => {
   if (!props.conversation || !props.conversation.messages) {
-    return [];
+    return []
   }
-  return props.conversation.messages;
-});
+  return props.conversation.messages
+})
 
 const messageCount = computed(() => {
-  return messages.value.filter(m =>
-    m.role === 'user' || m.role === 'assistant' || m.type === 'tool_result'
-  ).length;
-});
+  return messages.value.filter(
+    (m) => m.role === 'user' || m.role === 'assistant' || m.type === 'tool_result'
+  ).length
+})
 
 // The active conversation's bound bot (multi-bot model): look up which bot has
 // this jsonl bound. Drives the compact "<bot> 活跃/空闲" capsule (only shown for
 // bound conversations). Includes the bot's runtime processing flag.
 const remoteBot = computed(() => {
-  if (!props.conversation?.filePath || props.conversation.source === 'codex') return null;
-  const bot = feishuStore.bots.find((b) => b.binding?.jsonlPath === props.conversation.filePath);
-  if (!bot) return null;
-  return { id: bot.id, name: bot.name, processing: !!bot.processing };
-});
+  if (!props.conversation?.filePath || props.conversation.source === 'codex') return null
+  const bot = feishuStore.bots.find((b) => b.binding?.jsonlPath === props.conversation.filePath)
+  if (!bot) return null
+  return { id: bot.id, name: bot.name, processing: !!bot.processing }
+})
 
 function setBubbleRef(index, el) {
   if (el) {
-    bubbleRefs.value[index] = el;
+    bubbleRefs.value[index] = el
   }
 }
 
 function expandAll() {
-  Object.values(bubbleRefs.value).forEach(bubble => {
+  Object.values(bubbleRefs.value).forEach((bubble) => {
     if (bubble && bubble.expandAll) {
-      bubble.expandAll();
+      bubble.expandAll()
     }
-  });
-  allExpanded.value = true;
+  })
+  allExpanded.value = true
 }
 
 function collapseAll() {
-  Object.values(bubbleRefs.value).forEach(bubble => {
+  Object.values(bubbleRefs.value).forEach((bubble) => {
     if (bubble && bubble.collapseAll) {
-      bubble.collapseAll();
+      bubble.collapseAll()
     }
-  });
-  allExpanded.value = false;
+  })
+  allExpanded.value = false
 }
 
 function toggleAll() {
   if (allExpanded.value) {
-    collapseAll();
+    collapseAll()
   } else {
-    expandAll();
+    expandAll()
   }
 }
 
 function normalizeContent(content) {
-  if (typeof content === 'string') return [{ type: 'text', text: content }];
-  if (Array.isArray(content)) return content;
-  return [];
+  if (typeof content === 'string') return [{ type: 'text', text: content }]
+  if (Array.isArray(content)) return content
+  return []
 }
 
 // Reset expand state when conversation changes
-watch(() => props.conversation, () => {
-  bubbleRefs.value = {};
-  allExpanded.value = false;
-  showBackToTop.value = false;
-  if (exportResetTimer) clearTimeout(exportResetTimer);
-  exporting.value = false;
-  exportLabel.value = '导出';
-});
+watch(
+  () => props.conversation,
+  () => {
+    bubbleRefs.value = {}
+    allExpanded.value = false
+    showBackToTop.value = false
+    if (exportResetTimer) clearTimeout(exportResetTimer)
+    exporting.value = false
+    exportLabel.value = '导出'
+  }
+)
 
 // Auto-scroll to bottom on new messages
-watch(messages, async () => {
-  await nextTick();
-  if (messagesContainer.value) {
-    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
-  }
-}, { deep: true });
+watch(
+  messages,
+  async () => {
+    await nextTick()
+    if (messagesContainer.value) {
+      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+    }
+  },
+  { deep: true }
+)
 
 // Handle scroll to show/hide back-to-top button
 function handleScroll() {
   if (messagesContainer.value) {
-    showBackToTop.value = messagesContainer.value.scrollTop > 300;
+    showBackToTop.value = messagesContainer.value.scrollTop > 300
   }
 }
 
 function scrollToTop() {
   if (messagesContainer.value) {
-    messagesContainer.value.scrollTo({ top: 0, behavior: 'smooth' });
+    messagesContainer.value.scrollTo({ top: 0, behavior: 'smooth' })
   }
 }
 
 // Export the current conversation to a Markdown file via the main process
 // (native save dialog + write). The button reflects in-flight and outcome
 // state, then resets back to the idle label after a short delay.
-const exporting = ref(false);
-const exportLabel = ref('导出');
-let exportResetTimer = null;
+const exporting = ref(false)
+const exportLabel = ref('导出')
+let exportResetTimer = null
 
 async function exportMarkdown() {
-  if (!props.conversation || exporting.value) return;
-  exporting.value = true;
-  exportLabel.value = '导出中…';
-  if (exportResetTimer) clearTimeout(exportResetTimer);
+  if (!props.conversation || exporting.value) return
+  exporting.value = true
+  exportLabel.value = '导出中…'
+  if (exportResetTimer) clearTimeout(exportResetTimer)
   try {
     const result = await window.electronAPI.exportConversation({
       filePath: props.conversation.filePath,
       title: props.conversation.title,
       updatedAt: props.conversation.updatedAt,
-      source: props.conversation.source || 'claude',
-    });
+      source: props.conversation.source || 'claude'
+    })
     if (result?.canceled) {
-      exportLabel.value = '已取消';
+      exportLabel.value = '已取消'
     } else if (result?.success) {
-      exportLabel.value = '已导出 ✓';
+      exportLabel.value = '已导出 ✓'
     } else {
-      exportLabel.value = '导出失败';
+      exportLabel.value = '导出失败'
     }
   } catch (err) {
-    console.error('[MessageThread] export failed:', err);
-    exportLabel.value = '导出失败';
+    console.error('[MessageThread] export failed:', err)
+    exportLabel.value = '导出失败'
   } finally {
-    exporting.value = false;
-    exportResetTimer = setTimeout(() => { exportLabel.value = '导出'; }, 2200);
+    exporting.value = false
+    exportResetTimer = setTimeout(() => {
+      exportLabel.value = '导出'
+    }, 2200)
   }
 }
 </script>
@@ -313,21 +344,37 @@ async function exportMarkdown() {
 
 .thread-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   padding: 18px 24px 14px;
-  gap: 24px;
+  gap: 12px 24px;
 }
 
 .thread-header-left {
   display: flex;
   align-items: center;
   gap: 12px;
-  flex-shrink: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* Keep the switch state in its own component. CSS changes visibility without
+   updating the message tree, re-rendering Markdown, or remounting tool cards. */
+.thread-container:has(:deep(.dialogue-only-toggle input:checked)) :deep(.work-output) {
+  display: none;
+}
+
+/* Reserve its space so the switch stays under the pointer in both modes. */
+.thread-container:has(:deep(.dialogue-only-toggle input:checked)) .expand-all-btn {
+  visibility: hidden;
 }
 
 .thread-header-right {
   display: flex;
+  flex: 1;
+  min-width: 160px;
   flex-direction: column;
   gap: 4px;
   overflow: hidden;
@@ -382,7 +429,9 @@ async function exportMarkdown() {
   border: none;
   border-radius: var(--radius-control);
   cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
   flex-shrink: 0;
 }
 

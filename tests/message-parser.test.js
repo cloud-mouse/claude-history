@@ -25,6 +25,17 @@ describe('message-parser', () => {
   });
 
   describe('parseMessage', () => {
+    test('preserves skill context metadata without hiding ordinary user messages', () => {
+      const content = 'Base directory for this skill: /skills/example';
+      const skill = parseMessage({ type: 'user', isMeta: true, message: { content } });
+      expect(skill.isMeta).toBe(true);
+      expect(skill.blocks).toEqual([{ type: 'text', text: content }]);
+
+      const user = parseMessage({ type: 'user', message: { content: '请执行这个 skill' } });
+      expect(user.isMeta).not.toBe(true);
+      expect(user.blocks[0].text).toBe('请执行这个 skill');
+    });
+
     test('parses user message with raw string content', () => {
       const raw = {
         id: 'msg-123',
